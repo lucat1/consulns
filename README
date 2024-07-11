@@ -1,3 +1,7 @@
+A WIP PowerDNS Remote Backend that connects to Consul to retrieve DNS records
+from both the KV store as well as the Services API. Records can either be static
+or with dynamic data composed from the Services API. DNSSEC should be supported.
+
 To run PowerDNS in the foreground to debug, you can use the following command:
 
 $ pdns_server --no-config --daemon=no --local-port=5300 --launch=remote --socket-dir=$PWD/example --remote-connection-string=unix:path=$PWD/example/consulns.socket
