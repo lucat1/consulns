@@ -10,6 +10,7 @@ import (
 
 	"github.com/lucat1/consulns/handlers"
 	"github.com/lucat1/consulns/proto"
+	"github.com/lucat1/consulns/store"
 )
 
 func main() {
@@ -21,14 +22,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := store.Init(); err != nil {
+		slog.Error("could not initialize store", "err", err)
+		os.Exit(2)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	s := proto.NewListener(ctx, args[0])
 	s.HandleMethod("initialize", handlers.Initialize)
 	s.HandleMethod("getAllDomains", handlers.GetAllDomains)
+	s.HandleMethod("lookup", handlers.Lookup)
 	if err := s.ListenAndServe(); err != nil {
 		slog.Error("could not open unix listener", "path", args[0], "err", err)
-		os.Exit(1)
+		os.Exit(3)
 	}
 }
