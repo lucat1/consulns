@@ -10,11 +10,17 @@ import (
 
 type IPKey [16]byte
 
+type Defaults struct {
+	TTL      uint32
+	Priority uint32
+}
+
 type Zone struct {
 	defaults   Defaults
 	domain     string
 	lastUpdate time.Time
 	records    map[string][]Record
+	keys       map[int]Key
 }
 
 func (z Zone) Domain() string {
@@ -46,30 +52,6 @@ func (z Zone) ForwardLookup(query string, rt RecordType) (records []Record) {
 	return
 }
 
-func (z *Zone) AddRecord(domain string, record Record) (err error) {
-	if !strings.HasSuffix(domain, ".") {
-		err = fmt.Errorf("invalid domain: %s, expected trailing .", domain)
-		return
-	}
-
-	if record.TTL == 0 {
-		record.TTL = z.defaults.TTL
-	}
-
-	if record.Priority == 0 {
-		record.Priority = z.defaults.Priority
-	}
-
-	z.records[domain] = append(z.records[domain], record)
-	// TODO: efficiently handle reverse lookup
-	return
-}
-
-type Defaults struct {
-	TTL      uint32
-	Priority uint32
-}
-
 const (
 	RecordTypeANY   RecordType = "ANY"
 	RecordTypeSOA   RecordType = "SOA"
@@ -94,4 +76,23 @@ type Record struct {
 
 func (r Record) MatchesType(rt RecordType) bool {
 	return rt == RecordTypeANY || rt == r.Type
+}
+
+func (z *Zone) AddRecord(domain string, record Record) (err error) {
+	if !strings.HasSuffix(domain, ".") {
+		err = fmt.Errorf("invalid domain: %s, expected trailing .", domain)
+		return
+	}
+
+	if record.TTL == 0 {
+		record.TTL = z.defaults.TTL
+	}
+
+	if record.Priority == 0 {
+		record.Priority = z.defaults.Priority
+	}
+
+	z.records[domain] = append(z.records[domain], record)
+	// TODO: efficiently handle reverse lookup
+	return
 }

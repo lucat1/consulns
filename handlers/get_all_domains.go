@@ -8,16 +8,6 @@ import (
 	"github.com/lucat1/consulns/store"
 )
 
-// {
-// "id":1,
-// "zone":"unit.test.",
-// "masters":["10.0.0.1"],
-// "notified_serial":2,
-// "serial":2,
-// "last_check":1464693331,
-// "kind":"native"
-// }
-
 type Domain struct {
 	ID             int       `json:"id"`
 	Zone           string    `json:"zone"`

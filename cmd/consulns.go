@@ -34,6 +34,7 @@ func main() {
 	s.HandleMethod("initialize", handlers.Initialize)
 	s.HandleMethod("getAllDomains", handlers.GetAllDomains)
 	s.HandleMethod("getAllDomainMetadata", handlers.GetAllDomainMetadata)
+	s.HandleMethod("getDomainKeys", handlers.GetDomainKeys)
 	s.HandleMethod("lookup", handlers.Lookup)
 	if err := s.ListenAndServe(); err != nil {
 		slog.Error("could not open unix listener", "path", args[0], "err", err)
