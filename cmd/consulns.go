@@ -15,7 +15,7 @@ import (
 
 func main() {
 	flag.Parse()
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelInfo)
 	args := flag.Args()
 	if len(args) != 1 {
 		slog.Error("invalid program usage, missing socket path", "args", args)
@@ -33,6 +33,7 @@ func main() {
 	s := proto.NewListener(ctx, args[0])
 	s.HandleMethod("initialize", handlers.Initialize)
 	s.HandleMethod("getAllDomains", handlers.GetAllDomains)
+	s.HandleMethod("getAllDomainMetadata", handlers.GetAllDomainMetadata)
 	s.HandleMethod("lookup", handlers.Lookup)
 	if err := s.ListenAndServe(); err != nil {
 		slog.Error("could not open unix listener", "path", args[0], "err", err)

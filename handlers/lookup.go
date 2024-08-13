@@ -39,15 +39,20 @@ func Lookup(req *proto.Request, res *proto.Response) {
 		return
 	}
 
-	slog.Debug("performing lookup", "lookup", lookup)
+	slog.Info("performing lookup", "lookup", lookup)
 	s := store.Get()
-	z, err := s.GetZone(lookup.ZoneID)
-	if err != nil {
-		slog.Error("invalid lookup zone", "id", lookup.ZoneID, "err", err)
-		res.Fail()
-		return
+	var records []store.Record
+	if s.HasZone(lookup.ZoneID) {
+		z, err := s.GetZone(lookup.ZoneID)
+		if err != nil {
+			slog.Error("invalid lookup zone", "id", lookup.ZoneID, "err", err)
+			res.Fail()
+			return
+		}
+		records = z.ForwardLookup(lookup.QName, lookup.QType)
+	} else {
+		records = s.ForwardLookup(lookup.QName, lookup.QType)
 	}
-	records := z.ForwardLookup(lookup.QName, lookup.QType)
 
 	// TODO: expand records with consul data
 	results := []Record{}

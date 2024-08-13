@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +23,17 @@ func (z Zone) Domain() string {
 
 func (z Zone) LastUpdate() time.Time {
 	return z.lastUpdate
+}
+
+func (z Zone) Serial() uint32 {
+	// TODO: serial should be more granular, but we're limited to an uint32 in terms of size
+	serial := fmt.Sprintf("%04d%02d%02d", z.lastUpdate.Year(), z.lastUpdate.Month(), z.lastUpdate.Day())
+	slog.Debug("generated serial", "serial", serial, "last_update", z.lastUpdate)
+	seriali, err := strconv.ParseInt(serial, 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	return uint32(seriali)
 }
 
 func (z Zone) ForwardLookup(query string, rt RecordType) (records []Record) {
@@ -59,10 +72,11 @@ type Defaults struct {
 
 const (
 	RecordTypeANY   RecordType = "ANY"
+	RecordTypeSOA   RecordType = "SOA"
+	RecordTypeNS    RecordType = "NS"
 	RecordTypeA     RecordType = "A"
 	RecordTypeAAAA  RecordType = "AAAA"
 	RecordTypeMX    RecordType = "MX"
-	RecordTypeNS    RecordType = "NS"
 	RecordTypeCNAME RecordType = "CNAME"
 	RecordTypeTXT   RecordType = "TXT"
 	RecordTypeSRV   RecordType = "SRV"
