@@ -4,7 +4,7 @@ or with dynamic data composed from the Services API. DNSSEC should be supported.
 
 To run PowerDNS in the foreground to debug, you can use the following command:
 
-$ pdns_server --no-config --daemon=no --local-port=5300 --launch=remote --socket-dir=$PWD/example --remote-connection-string=unix:path=$PWD/example/consulns.socket
+$ pdns_server --config-dir=example
 
 Before starting PDNS, make sure to start the consulns accordingly:
 
