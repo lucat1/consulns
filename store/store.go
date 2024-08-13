@@ -18,12 +18,12 @@ func (s *Store) HasZone(id int) bool {
 	return id >= 0 && id < len(s.domains)
 }
 
-func (s *Store) GetZone(id int) (zone Domain, err error) {
+func (s *Store) GetZone(id int) (zone *Domain, err error) {
 	if id < 0 || id >= len(s.domains) {
 		err = fmt.Errorf("zone with %d does not exist", id)
 		return
 	}
-	zone = s.domains[id]
+	zone = &s.domains[id]
 	return
 }
 

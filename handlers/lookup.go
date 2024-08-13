@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"log/slog"
-	"strings"
 
 	"github.com/lucat1/consulns/proto"
 	"github.com/lucat1/consulns/store"
@@ -25,12 +24,6 @@ type Record struct {
 	TTL     uint32 `json:"ttl"`
 }
 
-func cutDots(qname string) string {
-	s1, _ := strings.CutSuffix(qname, ".")
-	s2, _ := strings.CutSuffix(s1, ".")
-	return s2
-}
-
 func Lookup(req *proto.Request, res *proto.Response) {
 	var lookup LookupRequest
 	if err := json.Unmarshal(req.Parameters(), &lookup); err != nil {
@@ -45,7 +38,7 @@ func Lookup(req *proto.Request, res *proto.Response) {
 	if s.HasZone(lookup.ZoneID) {
 		z, err := s.GetZone(lookup.ZoneID)
 		if err != nil {
-			slog.Error("invalid lookup zone", "id", lookup.ZoneID, "err", err)
+			slog.Error("invalid lookup domain", "id", lookup.ZoneID, "err", err)
 			res.Fail()
 			return
 		}
@@ -60,7 +53,7 @@ func Lookup(req *proto.Request, res *proto.Response) {
 	for _, rr := range records {
 		record := Record{
 			QType:   string(rr.Type),
-			QName:   cutDots(lookup.QName),
+			QName:   lookup.QName,
 			Content: rr.Value,
 			TTL:     rr.TTL,
 		}

@@ -32,6 +32,9 @@ func main() {
 
 	s := proto.NewListener(ctx, args[0])
 	s.HandleMethod("initialize", handlers.Initialize)
+	s.HandleMethod("lookup", handlers.Lookup)
+	s.HandleMethod("list", handlers.List)
+
 	s.HandleMethod("getAllDomains", handlers.GetAllDomains)
 	s.HandleMethod("getDomainInfo", handlers.GetDomainInfo)
 
@@ -47,7 +50,6 @@ func main() {
 	s.HandleMethod("publishDomainKey", handlers.UpdateDomainKey)
 	s.HandleMethod("unpublishDomainKey", handlers.UpdateDomainKey)
 
-	s.HandleMethod("lookup", handlers.Lookup)
 	if err := s.ListenAndServe(); err != nil {
 		slog.Error("could not open unix listener", "path", args[0], "err", err)
 		os.Exit(3)

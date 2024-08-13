@@ -48,6 +48,10 @@ func (d Domain) Serial() uint32 {
 	return uint32(seriali)
 }
 
+func (d Domain) Records() map[string][]Record {
+	return d.records
+}
+
 func (d Domain) ForwardLookup(query string, rt RecordType) (records []Record) {
 	rs := d.records[query]
 	for _, r := range rs {
