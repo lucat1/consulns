@@ -15,26 +15,32 @@ type Defaults struct {
 	Priority uint32
 }
 
-type Zone struct {
+type Domain struct {
 	defaults   Defaults
-	domain     string
+	zone       string
+	kind       string
 	lastUpdate time.Time
 	records    map[string][]Record
-	keys       map[int]Key
+	keys       []Key
+	metadata   map[string][]string
 }
 
-func (z Zone) Domain() string {
-	return z.domain
+func (d Domain) Zone() string {
+	return d.zone
 }
 
-func (z Zone) LastUpdate() time.Time {
-	return z.lastUpdate
+func (d Domain) Kind() string {
+	return d.kind
 }
 
-func (z Zone) Serial() uint32 {
+func (d Domain) LastUpdate() time.Time {
+	return d.lastUpdate
+}
+
+func (d Domain) Serial() uint32 {
 	// TODO: serial should be more granular, but we're limited to an uint32 in terms of size
-	serial := fmt.Sprintf("%04d%02d%02d", z.lastUpdate.Year(), z.lastUpdate.Month(), z.lastUpdate.Day())
-	slog.Debug("generated serial", "serial", serial, "last_update", z.lastUpdate)
+	serial := fmt.Sprintf("%04d%02d%02d", d.lastUpdate.Year(), d.lastUpdate.Month(), d.lastUpdate.Day())
+	slog.Debug("generated serial", "serial", serial, "last_update", d.lastUpdate)
 	seriali, err := strconv.ParseInt(serial, 10, 32)
 	if err != nil {
 		panic(err)
@@ -42,8 +48,8 @@ func (z Zone) Serial() uint32 {
 	return uint32(seriali)
 }
 
-func (z Zone) ForwardLookup(query string, rt RecordType) (records []Record) {
-	rs := z.records[query]
+func (d Domain) ForwardLookup(query string, rt RecordType) (records []Record) {
+	rs := d.records[query]
 	for _, r := range rs {
 		if r.MatchesType(rt) {
 			records = append(records, r)
@@ -78,21 +84,99 @@ func (r Record) MatchesType(rt RecordType) bool {
 	return rt == RecordTypeANY || rt == r.Type
 }
 
-func (z *Zone) AddRecord(domain string, record Record) (err error) {
+func (d *Domain) AddRecord(domain string, record Record) (err error) {
 	if !strings.HasSuffix(domain, ".") {
 		err = fmt.Errorf("invalid domain: %s, expected trailing .", domain)
 		return
 	}
 
 	if record.TTL == 0 {
-		record.TTL = z.defaults.TTL
+		record.TTL = d.defaults.TTL
 	}
 
 	if record.Priority == 0 {
-		record.Priority = z.defaults.Priority
+		record.Priority = d.defaults.Priority
 	}
 
-	z.records[domain] = append(z.records[domain], record)
+	d.records[domain] = append(d.records[domain], record)
 	// TODO: efficiently handle reverse lookup
+	return
+}
+
+type Key struct {
+	Flags     int
+	Active    bool
+	Published bool
+	Content   string
+}
+
+func (d Domain) Keys() []Key {
+	return d.keys
+}
+
+func (d *Domain) AddKey(ak Key) (err error) {
+	d.keys = append(d.keys, Key{
+		Flags:     ak.Flags,
+		Active:    ak.Active,
+		Published: ak.Published,
+		Content:   ak.Content,
+	})
+	// TODO: this should be also saved on consul
+	return
+}
+
+type KeyUpdate struct {
+	Active    *bool
+	Published *bool
+}
+
+func (d *Domain) UpdateKey(id int, upd KeyUpdate) (err error) {
+	if id < 0 || id >= len(d.keys) {
+		err = fmt.Errorf("Zone %s has no key with id %d", d.zone, id)
+		return
+	}
+
+	key := d.keys[id]
+	if upd.Active != nil {
+		key.Active = *upd.Active
+	}
+	if upd.Published != nil {
+		key.Published = *upd.Published
+	}
+	// TODO: check that the following line is actually necessary
+	d.keys[id] = key
+	// TODO: this should be also saved on consul
+	return
+}
+
+func (d *Domain) RemoveKey(id int) (err error) {
+	if id < 0 || id >= len(d.keys) {
+		err = fmt.Errorf("Zone %s has no key with id %d", d.zone, id)
+		return
+	}
+
+	d.keys = append(d.keys[:id], d.keys[id+1:]...)
+	// TODO: this should be also saved on consul
+	return
+}
+
+func (d Domain) Metadata() map[string][]string {
+	return d.metadata
+}
+
+func (d *Domain) SetMetadata(kind string, value []string) (err error) {
+	if prev, found := d.metadata[kind]; found {
+		slog.Debug("overwriting metadata", "kind", kind, "prev", strings.Join(prev, ","), "new", strings.Join(value, ","))
+	}
+	d.metadata[kind] = value
+	// TODO: save in consul
+	return
+}
+
+func (d Domain) GetMetadata(kind string) (value []string) {
+	value, found := d.metadata[kind]
+	if !found {
+		value = []string{}
+	}
 	return
 }

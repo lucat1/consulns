@@ -15,7 +15,7 @@ import (
 
 func main() {
 	flag.Parse()
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	args := flag.Args()
 	if len(args) != 1 {
 		slog.Error("invalid program usage, missing socket path", "args", args)
@@ -33,8 +33,20 @@ func main() {
 	s := proto.NewListener(ctx, args[0])
 	s.HandleMethod("initialize", handlers.Initialize)
 	s.HandleMethod("getAllDomains", handlers.GetAllDomains)
+	s.HandleMethod("getDomainInfo", handlers.GetDomainInfo)
+
 	s.HandleMethod("getAllDomainMetadata", handlers.GetAllDomainMetadata)
+	s.HandleMethod("getDomainMetadata", handlers.GetDomainMetadata)
+	s.HandleMethod("setDomainMetadata", handlers.SetDomainMetadata)
+
 	s.HandleMethod("getDomainKeys", handlers.GetDomainKeys)
+	s.HandleMethod("addDomainKey", handlers.AddDomainKey)
+	s.HandleMethod("removeDomainKey", handlers.AddDomainKey)
+	s.HandleMethod("activateDomainKey", handlers.UpdateDomainKey)
+	s.HandleMethod("deactivateDomainKey", handlers.UpdateDomainKey)
+	s.HandleMethod("publishDomainKey", handlers.UpdateDomainKey)
+	s.HandleMethod("unpublishDomainKey", handlers.UpdateDomainKey)
+
 	s.HandleMethod("lookup", handlers.Lookup)
 	if err := s.ListenAndServe(); err != nil {
 		slog.Error("could not open unix listener", "path", args[0], "err", err)
