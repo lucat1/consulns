@@ -30,69 +30,77 @@ func initConsul() (*capi.KV, error) {
 }
 
 // Get all values from consul and fill the store
-func getFromConsul() {
+func getFromConsul() error {
 	path := CONSUL_DNS_BASE + "/"
 
 	keys, _, err := KVApi.Keys(path, "/", nil)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	var domains []Domain
 	for i := range keys {
-		domains = append(domains, getDomainFromConsul(keys[i]))
+		d, err := getDomainFromConsul(keys[i])
+		if err != nil {
+			return err
+		}
+		domains = append(domains, d)
 	}
 	store.domains = domains
+
+	return nil
 }
 
-func getDomainFromConsul(path string) (d Domain) {
+func getDomainFromConsul(path string) (Domain, error) {
+	var d Domain
+
 	pair, _, err := KVApi.Get(path+"keys", nil)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	var keys []Key
 	err = json.Unmarshal(pair.Value, &keys)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	d.keys = keys
 
 	pair, _, err = KVApi.Get(path+"options/defaults", nil)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	var def Defaults
 	err = json.Unmarshal(pair.Value, &def)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	d.defaults = def
 
 	pair, _, err = KVApi.Get(path+"options/kind", nil)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	var kind string
 	err = json.Unmarshal(pair.Value, &kind)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	d.kind = kind
 
 	pair, _, err = KVApi.Get(path+"options/last_update", nil)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	var last_update time.Time
 	err = json.Unmarshal(pair.Value, &last_update)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 	d.lastUpdate = last_update
 
 	records, _, err := KVApi.Keys(path+CONSUL_RECORDS+"/", "/", nil)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 
 	if d.records == nil {
@@ -102,14 +110,14 @@ func getDomainFromConsul(path string) (d Domain) {
 	for i := range records {
 		pair, _, err = KVApi.Get(records[i], nil)
 		if err != nil {
-			panic(err)
+			return d, err
 		}
 
 		var r []Record
 		err := json.Unmarshal(pair.Value, &r)
 		if err != nil {
 			slog.With("value", pair.Value).Error("")
-			panic(err)
+			return d, err
 		}
 
 		if strings.HasSuffix(records[i], "@") {
@@ -124,20 +132,20 @@ func getDomainFromConsul(path string) (d Domain) {
 
 	metadatas, _, err := KVApi.Keys(path+CONSUL_METADATA+"/", "/", nil)
 	if err != nil {
-		panic(err)
+		return d, err
 	}
 
 	for i := range metadatas {
 		pair, _, err = KVApi.Get(metadatas[i], nil)
 		if err != nil {
-			panic(err)
+			return d, err
 		}
 
 		var r []string
 		err := json.Unmarshal(pair.Value, &r)
 		if err != nil {
 			slog.With("value", pair.Value).Error("")
-			panic(err)
+			return d, err
 		}
 
 		if strings.HasSuffix(records[i], "@") {
@@ -146,7 +154,7 @@ func getDomainFromConsul(path string) (d Domain) {
 		}
 	}
 
-	return
+	return d, nil
 }
 
 // tmp
@@ -192,19 +200,21 @@ func fillConsul() {
 	// slog.Debug("store initialized", "store", store)
 }
 
-func putIfNotExists(key string, value []byte) {
+func putIfNotExists(key string, value []byte) error {
 	pair, _, err := KVApi.Get(key, nil)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if pair != nil && slices.Equal(pair.Value, value) {
-		return
+		return nil
 	}
 
 	_, err = KVApi.Put(&capi.KVPair{Key: key, Value: value}, nil)
 	if err != nil {
-		panic(err)
+		return err
 	}
+
+	return nil
 }
 
 func consulAddRecord(zone, domain string, record *Record) {
