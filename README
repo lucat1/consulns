@@ -6,6 +6,10 @@ To run PowerDNS in the foreground to debug, you can use the following command:
 
 $ pdns_server --config-dir=example
 
+To run Consul:
+
+$ consul agent -bind=127.0.0.1 -data-dir=/tmp/consul.data -client=127.0.0.1 -server -node=n1 -bootstrap -bootstrap-expect=1
+
 Before starting PDNS, make sure to start the consulns accordingly:
 
 $ go run ./cmd/consulns.go -- ./example/consulns.socket

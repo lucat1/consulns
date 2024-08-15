@@ -8,11 +8,43 @@ import (
 	"time"
 )
 
-type IPKey [16]byte
+type RecordType string
+
+const (
+	RecordTypeANY   RecordType = "ANY"
+	RecordTypeSOA   RecordType = "SOA"
+	RecordTypeNS    RecordType = "NS"
+	RecordTypeA     RecordType = "A"
+	RecordTypeAAAA  RecordType = "AAAA"
+	RecordTypeMX    RecordType = "MX"
+	RecordTypeCNAME RecordType = "CNAME"
+	RecordTypeTXT   RecordType = "TXT"
+	RecordTypeSRV   RecordType = "SRV"
+)
+
+type Record struct {
+	TTL      uint32     `json:"ttl"`
+	Type     RecordType `json:"type"`
+	Priority uint32     `json:"priority"`
+	Consul   bool       `json:"consul"`
+	Value    string     `json:"value"`
+}
 
 type Defaults struct {
-	TTL      uint32
-	Priority uint32
+	TTL      uint32 `json:"defaults"`
+	Priority uint32 `json:"priority"`
+}
+
+type KeyUpdate struct {
+	Active    *bool
+	Published *bool
+}
+
+type Key struct {
+	Flags     int
+	Active    bool
+	Published bool
+	Content   string
 }
 
 type Domain struct {
@@ -37,6 +69,10 @@ func (d Domain) LastUpdate() time.Time {
 	return d.lastUpdate
 }
 
+func (d Domain) Records() map[string][]Record {
+	return d.records
+}
+
 func (d Domain) Serial() uint32 {
 	// TODO: serial should be more granular, but we're limited to an uint32 in terms of size
 	serial := fmt.Sprintf("%04d%02d%02d", d.lastUpdate.Year(), d.lastUpdate.Month(), d.lastUpdate.Day())
@@ -48,8 +84,20 @@ func (d Domain) Serial() uint32 {
 	return uint32(seriali)
 }
 
-func (d Domain) Records() map[string][]Record {
-	return d.records
+func (d Domain) Keys() []Key {
+	return d.keys
+}
+
+func (d Domain) Metadata() map[string][]string {
+	return d.metadata
+}
+
+func (d Domain) GetMetadata(kind string) (value []string) {
+	value, found := d.metadata[kind]
+	if !found {
+		value = []string{}
+	}
+	return
 }
 
 func (d Domain) ForwardLookup(query string, rt RecordType) (records []Record) {
@@ -60,28 +108,6 @@ func (d Domain) ForwardLookup(query string, rt RecordType) (records []Record) {
 		}
 	}
 	return
-}
-
-const (
-	RecordTypeANY   RecordType = "ANY"
-	RecordTypeSOA   RecordType = "SOA"
-	RecordTypeNS    RecordType = "NS"
-	RecordTypeA     RecordType = "A"
-	RecordTypeAAAA  RecordType = "AAAA"
-	RecordTypeMX    RecordType = "MX"
-	RecordTypeCNAME RecordType = "CNAME"
-	RecordTypeTXT   RecordType = "TXT"
-	RecordTypeSRV   RecordType = "SRV"
-)
-
-type RecordType string
-
-type Record struct {
-	TTL      uint32
-	Type     RecordType
-	Priority uint32
-	Consul   bool
-	Value    string
 }
 
 func (r Record) MatchesType(rt RecordType) bool {
@@ -103,19 +129,11 @@ func (d *Domain) AddRecord(domain string, record Record) (err error) {
 	}
 
 	d.records[domain] = append(d.records[domain], record)
+
+	consulAddRecord(d.zone, domain, &record)
+
 	// TODO: efficiently handle reverse lookup
 	return
-}
-
-type Key struct {
-	Flags     int
-	Active    bool
-	Published bool
-	Content   string
-}
-
-func (d Domain) Keys() []Key {
-	return d.keys
 }
 
 func (d *Domain) AddKey(ak Key) (err error) {
@@ -127,11 +145,6 @@ func (d *Domain) AddKey(ak Key) (err error) {
 	})
 	// TODO: this should be also saved on consul
 	return
-}
-
-type KeyUpdate struct {
-	Active    *bool
-	Published *bool
 }
 
 func (d *Domain) UpdateKey(id int, upd KeyUpdate) (err error) {
@@ -164,23 +177,11 @@ func (d *Domain) RemoveKey(id int) (err error) {
 	return
 }
 
-func (d Domain) Metadata() map[string][]string {
-	return d.metadata
-}
-
 func (d *Domain) SetMetadata(kind string, value []string) (err error) {
 	if prev, found := d.metadata[kind]; found {
 		slog.Debug("overwriting metadata", "kind", kind, "prev", strings.Join(prev, ","), "new", strings.Join(value, ","))
 	}
 	d.metadata[kind] = value
 	// TODO: save in consul
-	return
-}
-
-func (d Domain) GetMetadata(kind string) (value []string) {
-	value, found := d.metadata[kind]
-	if !found {
-		value = []string{}
-	}
 	return
 }

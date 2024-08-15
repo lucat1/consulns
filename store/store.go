@@ -3,11 +3,38 @@ package store
 import (
 	"fmt"
 	"log/slog"
-	"time"
+
+	capi "github.com/hashicorp/consul/api"
 )
 
 type Store struct {
 	domains []Domain
+}
+
+var store *Store
+
+// Api for kv store inside consul
+var KVApi *capi.KV
+
+func Get() *Store {
+	return store
+}
+
+func Init() (err error) {
+
+	KVApi, err = initConsul()
+	if err != nil {
+		return err
+	}
+
+	store = &Store{}
+
+	// fillConsul()
+	getFromConsul()
+
+	slog.With("store", store).Debug("")
+
+	return
 }
 
 func (s *Store) Domains() []Domain {
@@ -46,6 +73,7 @@ func (s *Store) AddZone(zone Domain) (err error) {
 			return
 		}
 	}
+	consulAddZone(&zone)
 	s.domains = append(s.domains, zone)
 	return
 }
@@ -54,54 +82,5 @@ func (s *Store) ForwardLookup(query string, rt RecordType) (records []Record) {
 	for _, z := range s.domains {
 		records = append(records, z.ForwardLookup(query, rt)...)
 	}
-	return
-}
-
-var store *Store
-
-func Get() *Store {
-	return store
-}
-
-func Init() (err error) {
-	// TODO: actually connect to consul and fetch the data from the KV store
-	z1 := Domain{
-		zone: "teapot.ovh.",
-		defaults: Defaults{
-			TTL:      3600,
-			Priority: 10,
-		},
-		lastUpdate: time.Now(),
-		records:    map[string][]Record{},
-		metadata:   map[string][]string{},
-	}
-	store = &Store{}
-
-	if err = z1.AddRecord("teapot.ovh.", Record{
-		Type:  RecordTypeSOA,
-		Value: fmt.Sprintf("ns1.teapot.ovh. root.teapot.ovh. %d 7200 3600 1209600 3600", z1.Serial()),
-	}); err != nil {
-		return
-	}
-	if err = z1.AddRecord("teapot.ovh.", Record{
-		Type:  RecordTypeNS,
-		Value: "ns1.teapot.ovh",
-	}); err != nil {
-		return
-	}
-	if err = z1.AddRecord("ns1.teapot.ovh.", Record{
-		Type:  RecordTypeA,
-		Value: "1.2.3.4",
-	}); err != nil {
-		return
-	}
-	if err = z1.AddRecord("teapot.ovh.", Record{
-		Type:  RecordTypeA,
-		Value: "1.2.3.4",
-	}); err != nil {
-		return
-	}
-	store.AddZone(z1)
-	slog.Debug("store initialized", "store", store)
 	return
 }
