@@ -13,44 +13,6 @@ import (
 	capi "github.com/hashicorp/consul/api"
 )
 
-const (
-	CONSUL_DNS_BASE = "dns"
-	CONSUL_RECORDS  = "records"
-	CONSUL_METADATA = "metadata"
-)
-
-func initConsul() (*capi.KV, error) {
-	// TODO: Actual login in a cluster
-	client, err := capi.NewClient(capi.DefaultConfig())
-	if err != nil {
-		return nil, err
-	}
-
-	return client.KV(), nil
-}
-
-// Get all values from consul and fill the store
-func getFromConsul() error {
-	path := CONSUL_DNS_BASE + "/"
-
-	keys, _, err := KVApi.Keys(path, "/", nil)
-	if err != nil {
-		return err
-	}
-
-	var domains []Domain
-	for i := range keys {
-		d, err := getDomainFromConsul(keys[i])
-		if err != nil {
-			return err
-		}
-		domains = append(domains, d)
-	}
-	store.domains = domains
-
-	return nil
-}
-
 func getDomainFromConsul(path string) (Domain, error) {
 	var d Domain
 

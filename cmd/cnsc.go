@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	ccli "github.com/lucat1/consulns/cli"
 	"github.com/urfave/cli/v2"
 )
 
@@ -27,10 +28,7 @@ func main() {
 						Aliases: []string{"ls"},
 						Usage:   "list all available zones",
 						Args:    false,
-						Action: func(cCtx *cli.Context) error {
-							fmt.Println("list all zones")
-							return nil
-						},
+						Action:  ccli.ListZones,
 					},
 					{
 						Name:  "show",
@@ -159,6 +157,6 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 }

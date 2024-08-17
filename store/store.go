@@ -3,8 +3,6 @@ package store
 import (
 	"fmt"
 	"log/slog"
-
-	capi "github.com/hashicorp/consul/api"
 )
 
 type Store struct {
@@ -13,28 +11,22 @@ type Store struct {
 
 var store *Store
 
-// Api for kv store inside consul
-var KVApi *capi.KV
-
-func Get() *Store {
-	return store
-}
-
-func Init() (err error) {
-
-	KVApi, err = initConsul()
-	if err != nil {
-		return err
-	}
-
+func Initialize() (err error) {
 	store = &Store{}
 
 	// fillConsul()
-	getFromConsul()
+	err = getFromConsul()
+	if err != nil {
+		err = fmt.Errorf("Cannot fetch data from consul to initialize the store: %v", err)
+		return
+	}
 
-	slog.With("store", store).Debug("")
-
+	slog.Debug("store initialized", "domains", store.domains)
 	return
+}
+
+func Get() *Store {
+	return store
 }
 
 func (s *Store) Domains() []Domain {

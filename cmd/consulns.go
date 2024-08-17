@@ -22,7 +22,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := store.Init(); err != nil {
+	if err := store.Initialize(); err != nil {
 		slog.Error("could not initialize store", "err", err)
 		os.Exit(2)
 	}
