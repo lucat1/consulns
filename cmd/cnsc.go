@@ -120,6 +120,40 @@ func main() {
 						},
 					},
 				},
+			}, {
+				Name:    "changes",
+				Aliases: []string{"c"},
+				Usage:   "actions on non-commited changes",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "list",
+						Usage: "list all current changes",
+						Args:  false,
+						Action: func(cCtx *cli.Context) error {
+							fmt.Println("listing changes (numbered)")
+							return nil
+						},
+					},
+					{
+						Name:  "remove",
+						Usage: "remove a pending change",
+						Args:  true,
+						Action: func(cCtx *cli.Context) error {
+							id := cCtx.Args().First()
+							fmt.Println("removing change", id)
+							return nil
+						},
+					},
+					{
+						Name:  "commit",
+						Usage: "commit all pending changes",
+						Args:  false,
+						Action: func(cCtx *cli.Context) error {
+							fmt.Println("committing changes")
+							return nil
+						},
+					},
+				},
 			},
 		},
 	}
