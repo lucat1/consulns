@@ -31,7 +31,7 @@ type Record struct {
 }
 
 type Defaults struct {
-	TTL      uint32 `json:"defaults"`
+	TTL      uint32 `json:"ttl"`
 	Priority uint32 `json:"priority"`
 }
 

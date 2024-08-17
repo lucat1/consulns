@@ -162,23 +162,6 @@ func fillConsul() {
 	// slog.Debug("store initialized", "store", store)
 }
 
-func putIfNotExists(key string, value []byte) error {
-	pair, _, err := KVApi.Get(key, nil)
-	if err != nil {
-		return err
-	}
-	if pair != nil && slices.Equal(pair.Value, value) {
-		return nil
-	}
-
-	_, err = KVApi.Put(&capi.KVPair{Key: key, Value: value}, nil)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func consulAddRecord(zone, domain string, record *Record) {
 	path := CONSUL_DNS_BASE + "/" + zone + "/" + CONSUL_RECORDS + "/"
 
@@ -208,46 +191,4 @@ func consulAddRecord(zone, domain string, record *Record) {
 		panic(err)
 	}
 	putIfNotExists(path, m)
-}
-
-func consulAddZone(zone *Domain) {
-	path := CONSUL_DNS_BASE + "/" + zone.zone
-
-	m, err := json.Marshal(zone.defaults)
-	if err != nil {
-		panic(err)
-	}
-	putIfNotExists(path+"/options/defaults", m)
-
-	putIfNotExists(path+"/options/kind", []byte(zone.kind))
-
-	m, err = json.Marshal(zone.lastUpdate)
-	if err != nil {
-		panic(err)
-	}
-	putIfNotExists(path+"/options/last_update", m)
-
-	m, err = json.Marshal(zone.keys)
-	if err != nil {
-		panic(err)
-	}
-	putIfNotExists(path+"/keys", m)
-
-	for d, i := range zone.records {
-		m, err := json.Marshal(i)
-		if err != nil {
-			panic(err)
-		}
-
-		putIfNotExists(path+"/"+CONSUL_RECORDS+"/"+d, m)
-	}
-
-	for d, i := range zone.metadata {
-		m, err := json.Marshal(i)
-		if err != nil {
-			panic(err)
-		}
-
-		putIfNotExists(path+"/"+CONSUL_METADATA+"/"+d, m)
-	}
 }

@@ -31,22 +31,16 @@ func main() {
 						Action:  ccli.ListZones,
 					},
 					{
-						Name:  "show",
-						Usage: "show information about a zone",
-						Args:  true,
-						Action: func(cCtx *cli.Context) error {
-							fmt.Println("show info about zone", cCtx.Args().First())
-							return nil
-						},
+						Name:   "show",
+						Usage:  "show information about a zone",
+						Args:   true,
+						Action: ccli.ShowZone,
 					},
 					{
-						Name:  "add",
-						Usage: "add a new zone",
-						Args:  true,
-						Action: func(cCtx *cli.Context) error {
-							fmt.Println("add new zone", cCtx.Args().First())
-							return nil
-						},
+						Name:   "add",
+						Usage:  "add a new zone",
+						Args:   true,
+						Action: ccli.AddZone,
 					},
 					{
 						Name:  "remove",
