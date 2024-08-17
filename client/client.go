@@ -187,3 +187,17 @@ func (c *Client) AddZone(domain string, kind Kind) (zone Zone, err error) {
 	}
 	return
 }
+
+func (c Client) RemoveZone(domain string) (err error) {
+	z, err := c.GetZone(domain)
+	if err != nil {
+		return
+	}
+
+	_, err = c.kv.DeleteTree(z.paths.root, nil)
+	if err != nil {
+		err = fmt.Errorf("Could not delete domain %s", domain)
+	}
+
+	return
+}
