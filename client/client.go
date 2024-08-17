@@ -136,7 +136,7 @@ func (c *Client) GetZone(domain string) (zone Zone, err error) {
 	return
 }
 
-func (c *Client) AddZone(domain string, kind ZoneKind) (zone Zone, err error) {
+func (c *Client) AddZone(domain string, kind Kind) (zone Zone, err error) {
 	_, err = c.GetZone(domain)
 	if err == nil {
 		err = fmt.Errorf("Zone %s already exists, refusing to overwrite", domain)
@@ -169,6 +169,10 @@ func (c *Client) AddZone(domain string, kind ZoneKind) (zone Zone, err error) {
 	}
 
 	if err = c.update(paths.keys, []byte("[]")); err != nil {
+		return
+	}
+
+	if err = c.update(paths.metadata, []byte("{}")); err != nil {
 		return
 	}
 
