@@ -43,13 +43,10 @@ func main() {
 						Action: ccli.AddZone,
 					},
 					{
-						Name:  "remove",
-						Usage: "remove a zone",
-						Args:  true,
-						Action: func(cCtx *cli.Context) error {
-							fmt.Println("remove zone", cCtx.Args().First())
-							return nil
-						},
+						Name:   "remove",
+						Usage:  "remove a zone",
+						Args:   true,
+						Action: ccli.RemoveZone,
 					},
 				},
 			},

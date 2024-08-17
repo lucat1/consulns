@@ -109,3 +109,25 @@ func AddZone(ctx *cli.Context) (err error) {
 	_, err = client.Get().AddZone(domain, client.ZoneKindNative)
 	return
 }
+
+func RemoveZone(ctx *cli.Context) (err error) {
+	if ctx.Args().Len() != 1 {
+		err = fmt.Errorf("Expected exactly one argument, got %d", ctx.Args().Len())
+		return
+	}
+	domain := ctx.Args().First()
+	if err = client.Initialize(); err != nil {
+		return
+	}
+
+	fmt.Printf("You're about to remove zone %s. To confirm please retype the zone's domain: ", domain)
+	var in string
+	fmt.Scanf("%s", &in)
+	if in != domain {
+		fmt.Println("aborted")
+		return
+	}
+
+	err = client.Get().RemoveZone(domain)
+	return
+}
