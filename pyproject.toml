@@ -35,7 +35,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 80
-indent-width = 2
+indent-width = 4
 
 [tool.ruff.format]
 quote-style = "double"

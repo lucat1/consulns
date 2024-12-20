@@ -1,9 +1,12 @@
 let
-  pkgs = import <nixpkgs> {};
+  pkgs = import <nixpkgs> { config = { allowUnfree = true; }; };
 in pkgs.mkShell {
   buildInputs = with pkgs; [
     python313
     python313Packages.venvShellHook
+
+    pdns
+    consul
   ];
   venvDir = "./.venv";
   postVenvCreation = ''
