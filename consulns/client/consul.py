@@ -20,6 +20,9 @@ class ZoneDoesNotExist(Exception):
 class KeyNotInserted(Exception):
     pass
 
+class MissingChange(Exception):
+    pass
+
 class Consul:
     def __init__(self, client: ConsulClient) -> None:
         self.client = client
@@ -83,6 +86,7 @@ class Consul:
 class RecordType(Enum):
     A = "A"
     AAAA = "AAAA"
+    CNAME = "CNAME"
     CONSUL = "CONSUL"
 
 class Record(BaseModel):
@@ -207,6 +211,15 @@ class Zone:
         change = Change(update=add_record, date=datetime.now())
         self._staging.changes[change.key] = change
         self._update_staging()
+
+    def revert(self, id: int) -> None:
+        for i, change in enumerate(self.changes):
+            if i == id:
+                del self._staging.changes[change.key]
+                self._update_staging()
+                return
+
+        raise MissingChange(id)
 
 # The consul client is constructed lazyly as not all commands require it.
 def pass_consul(f):

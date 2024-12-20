@@ -30,5 +30,13 @@ def add(zone: Zone, record: str, record_type: RecordType, value: str, ttl: int):
     zone.add_record(r)
     print(f"Added record to zone {zone.name}")
 
+@stage.command()
+@click.argument('id', type=int)
+@pass_zone
+def revert(zone: Zone, id: int):
+    zone.revert(id)
+    print(f"Reverted staged change {id}")
+
 stage.add_command(status)
 stage.add_command(add)
+stage.add_command(revert)
