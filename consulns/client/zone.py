@@ -20,7 +20,8 @@ def current_zone() -> str | None:
 def list(consul: Consul):
     cz = current_zone()
     for zone in consul.zones:
-        print("\t" if zone.name != cz else "*\t", zone.name, zone.serial)
+        selected = "\t" if zone.name != cz else "*\t"
+        print(f"{selected}{zone.name}\t{zone.serial}")
 
 @zone.command()
 @click.argument('zone_name', type=str)

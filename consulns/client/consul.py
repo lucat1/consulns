@@ -1,7 +1,7 @@
 from base64 import b64encode
 from datetime import datetime
 from enum import Enum
-from typing import Iterator, Literal, Tuple, TypedDict, Set, Union, List, Dict
+from typing import Iterator, Literal, Tuple, TypedDict, Set, Union, Dict
 from uuid import uuid4
 import click
 from consul import Consul as ConsulClient
@@ -85,27 +85,23 @@ class RecordType(Enum):
     AAAA = "AAAA"
     CONSUL = "CONSUL"
 
-class RecordValue(BaseModel):
-    value_type: Literal['raw'] = 'raw'
-    record_type: RecordType
-    value: IPvAnyAddress | str
-
-    @property
-    def key(self) -> str:
-        concatenated = f"{self.record_type}.{self.value_type}.{self.value}"
-        record_value = b64encode(concatenated.encode('utf-8')).decode('utf-8')
-        return record_value
-
 class Record(BaseModel):
     id: UUID4 = uuid4()
     record: str
-    value: RecordValue
+    record_type: RecordType
+    value: IPvAnyAddress | str
     ttl: int
 
     @property
     def key(self) -> str:
         record = b64encode(self.record.encode('utf-8')).decode('utf-8')
-        return f"{record}.{self.value.key}"
+        concatenated_value = f"{self.record_type.value}.{self.value}"
+        value = b64encode(concatenated_value.encode('utf-8')).decode('utf-8')
+        return f"{record}.{value}"
+
+    @property
+    def pretty_str(self) -> str:
+        return f"{self.record} IN {self.record_type.value} {self.ttl} {self.value}"
 
 class AddRecord(BaseModel):
     change_type: Literal['add'] = 'add'
@@ -115,6 +111,10 @@ class AddRecord(BaseModel):
     def key(self) -> str:
         return f"add.{self.record.key}"
 
+    @property
+    def pretty_str(self) -> str:
+        return f"ADD\t{self.record.pretty_str}"
+
 class DelRecord(BaseModel):
     change_type: Literal['del'] = 'del'
     id: UUID4
@@ -123,14 +123,21 @@ class DelRecord(BaseModel):
     def key(self) -> str:
         id = b64encode(str(self.id).encode('utf-8')).decode('utf-8')
         return f"del.{id}"
+
+    @property
+    def pretty_str(self) -> str:
+        return f"DEL\t{self.id}"
     
 class Change(BaseModel):
     update: Union[AddRecord, DelRecord] = Field(discriminator='change_type')
-    date: PastDatetime
 
     @property
     def key(self) -> str:
         return self.update.key
+
+    @property
+    def pretty_str(self) -> str:
+        return self.update.pretty_str
 
 class Zone:
     def __init__(self, consul: Consul, zone_name: str) -> None:
