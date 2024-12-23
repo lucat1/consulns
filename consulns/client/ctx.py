@@ -6,6 +6,7 @@ from consulns.store import Consul
 from consulns.client.config import Config, pass_config
 from consulns.const import CLICK_CONSUL_CTX_KEY, CLICK_ZONE_CTX_KEY
 
+
 # The consul client is constructed lazyly as not all commands require it.
 def pass_consul(f):
     @pass_config
@@ -24,8 +25,10 @@ def pass_consul(f):
 
     return update_wrapper(new_func, f)
 
+
 class NoZoneSelected(Exception):
     pass
+
 
 # The zone client is constructed lazyly as not all commands require it.
 def pass_zone(f):
@@ -40,6 +43,6 @@ def pass_zone(f):
             ctx.obj[CLICK_ZONE_CTX_KEY] = cz
             pass
 
-        return ctx.invoke(f, ctx.obj[CLICK_ZONE_CTX_KEY ], *args, **kwargs)
+        return ctx.invoke(f, ctx.obj[CLICK_ZONE_CTX_KEY], *args, **kwargs)
 
     return update_wrapper(new_func, f)

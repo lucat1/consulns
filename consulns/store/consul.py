@@ -5,19 +5,30 @@ from typing import Iterator, Literal, Tuple, TypedDict, Set, Union, Dict
 from uuid import uuid4
 from pydantic import UUID4, Field, IPvAnyAddress, TypeAdapter, BaseModel
 
-from consulns.const import CONSUL_PATH_CURRENT_ZONE, CONSUL_PATH_ZONE_INFO, CONSUL_PATH_ZONE_RECORDS, CONSUL_PATH_ZONE_STAGING, CONSUL_PATH_ZONES
+from consulns.const import (
+    CONSUL_PATH_CURRENT_ZONE,
+    CONSUL_PATH_ZONE_INFO,
+    CONSUL_PATH_ZONE_RECORDS,
+    CONSUL_PATH_ZONE_STAGING,
+    CONSUL_PATH_ZONES,
+)
+
 
 class ZoneAlreadyExists(Exception):
     pass
 
+
 class ZoneDoesNotExist(Exception):
     pass
+
 
 class KeyNotInserted(Exception):
     pass
 
+
 class MissingChange(Exception):
     pass
+
 
 class Consul:
     def __init__(self, client: ConsulClient) -> None:
@@ -33,7 +44,9 @@ class Consul:
 
     _value_ta = TypeAdapter(Value)
 
-    def _kv_get[T: BaseModel](self, key: str, t: type[T]) -> Tuple[int, T | None]:
+    def _kv_get[T: BaseModel](
+        self, key: str, t: type[T]
+    ) -> Tuple[int, T | None]:
         self._client.kv
         idx, raw_value = self._client.kv.get(key)
         if raw_value is None:
@@ -86,12 +99,13 @@ class Consul:
         _, val = self._kv_get(CONSUL_PATH_CURRENT_ZONE, self.CurrentZone)
         if val is None:
             return None
-        
+
         return self.zone(val.zone)
 
     def use_zone(self, zone: "Zone") -> None:
         cz = self.CurrentZone(zone=zone.name)
         self._kv_set(CONSUL_PATH_CURRENT_ZONE, cz)
+
 
 class RecordType(Enum):
     A = "A"
@@ -104,6 +118,7 @@ class RecordType(Enum):
     def __str__(self) -> str:
         return f"IN {self.value}"
 
+
 class Record(BaseModel):
     id: UUID4 = uuid4()
     record: str
@@ -113,38 +128,44 @@ class Record(BaseModel):
 
     @property
     def key(self) -> str:
-        record = b64encode(self.record.encode('utf-8')).decode('utf-8')
+        record = b64encode(self.record.encode("utf-8")).decode("utf-8")
         concatenated_value = f"{self.record_type.value}.{self.value}"
-        value = b64encode(concatenated_value.encode('utf-8')).decode('utf-8')
+        value = b64encode(concatenated_value.encode("utf-8")).decode("utf-8")
         return f"{record}.{value}"
 
     @property
     def pretty_str(self) -> str:
-        return f"{self.record} IN {self.record_type.value} {self.ttl} {self.value}"
+        return (
+            f"{self.record} IN {self.record_type.value} {self.ttl} {self.value}"
+        )
+
 
 class AddRecord(BaseModel):
-    change_type: Literal['add'] = 'add'
+    change_type: Literal["add"] = "add"
     record: Record
 
     @property
     def key(self) -> str:
         return f"add.{self.record.key}"
 
+
 class DelRecord(BaseModel):
-    change_type: Literal['del'] = 'del'
+    change_type: Literal["del"] = "del"
     id: UUID4
 
     @property
     def key(self) -> str:
-        id = b64encode(str(self.id).encode('utf-8')).decode('utf-8')
+        id = b64encode(str(self.id).encode("utf-8")).decode("utf-8")
         return f"del.{id}"
-    
+
+
 class Change(BaseModel):
-    update: Union[AddRecord, DelRecord] = Field(discriminator='change_type')
+    update: Union[AddRecord, DelRecord] = Field(discriminator="change_type")
 
     @property
     def key(self) -> str:
         return self.update.key
+
 
 class Zone:
     def __init__(self, consul: Consul, zone_name: str) -> None:
@@ -178,7 +199,7 @@ class Zone:
     def _update_info(self) -> None:
         info_path = self._compute_path(CONSUL_PATH_ZONE_INFO)
         self._consul._kv_set(info_path, self._info)
-    
+
     @property
     def serial(self) -> int:
         return self._info.serial
@@ -196,7 +217,7 @@ class Zone:
             staging_path = self._compute_path(CONSUL_PATH_ZONE_STAGING)
             _, staging = self._consul._kv_get(staging_path, self.Staging)
             if staging is None:
-               staging = self.Staging()
+                staging = self.Staging()
             self.__staging = staging
 
         return self.__staging
@@ -240,7 +261,7 @@ class Zone:
             records_path = self._compute_path(CONSUL_PATH_ZONE_RECORDS)
             _, records = self._consul._kv_get(records_path, self.Records)
             if records is None:
-               records = self.Records()
+                records = self.Records()
             self.__records = records
 
         return self.__records
@@ -264,9 +285,9 @@ class Zone:
     def commit(self) -> None:
         for c in self.changes:
             updt = c.update
-            if updt.change_type == 'add':
+            if updt.change_type == "add":
                 self._records.records[updt.record.id] = updt.record
-            elif updt.change_type == 'del':
+            elif updt.change_type == "del":
                 del self._records.records[updt.id]
             else:
                 assert False
