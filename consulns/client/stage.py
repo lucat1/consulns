@@ -1,4 +1,5 @@
 import click
+from tabulate import tabulate
 
 from consulns.client.cli import cli
 from consulns.client.consul import Record, RecordType, Zone
@@ -11,8 +12,27 @@ def stage():
 @stage.command()
 @pass_zone
 def status(zone: Zone):
-    for i, change in enumerate(zone.changes):
-        print(f"{i}\t{change.pretty_str}")
+    cli_name = click.get_current_context().find_root().info_name
+    click.echo(f"On zone {zone.name}")
+    changes = []
+    for change in zone.changes:
+        fg = 'green' if change.update.change_type == 'add' else 'red'
+        # TODO: display del changes!
+        assert change.update.change_type == 'add'
+        r = change.update.record
+        s = lambda s: click.style(s, fg=fg)
+
+        changes.append((s(r.record), s(f"IN {r.record_type.value}"), s(r.ttl), s(r.value)))
+    if len(changes) <= 0:
+        click.echo("No changes staged")
+        return
+    click.echo("Changes staged for commit:")
+    click.echo(f"  (use {cli_name} revert <id> to revert a change)")
+    click.echo(f"  (use {cli_name} commit to publish all changes)")
+
+    tbl = tabulate(changes, tablefmt='plain')
+    tbl = "\n".join(f"{i}\t{s}" for i, s in enumerate(tbl.split('\n')))
+    click.echo(tbl)
 
 @stage.command()
 @click.argument('record', type=str)
@@ -28,15 +48,23 @@ def add(zone: Zone, record: str, record_type: RecordType, value: str, ttl: int):
         ttl=ttl,
     )
     zone.add_record(r)
-    print(f"Added record to zone {zone.name}")
+    click.echo(f"On zone {zone.name}")
+    click.echo("Added record:")
+    click.secho(f"\t{r.record} IN {r.record_type.value} {r.ttl} {r.value}", fg='green')
 
 @stage.command()
 @click.argument('id', type=int)
 @pass_zone
 def revert(zone: Zone, id: int):
     zone.revert(id)
-    print(f"Reverted staged change {id}")
+    click.secho(f"Reverted staged change {id}", fg='yellow')
+
+@stage.command()
+@pass_zone
+def commit(zone: Zone):
+    print(f"TODO: commit on zone {zone.name}")
 
 stage.add_command(status)
 stage.add_command(add)
 stage.add_command(revert)
+stage.add_command(commit)
