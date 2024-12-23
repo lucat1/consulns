@@ -1,15 +1,14 @@
 from base64 import b64encode
-from datetime import datetime
 from enum import Enum
 from typing import Iterator, Literal, Tuple, TypedDict, Set, Union, Dict
 from uuid import uuid4
 import click
 from consul import Consul as ConsulClient
 from functools import update_wrapper
-from pydantic import UUID4, Field, IPvAnyAddress, PastDatetime, TypeAdapter, BaseModel
+from pydantic import UUID4, Field, IPvAnyAddress, TypeAdapter, BaseModel
 
 from consulns.client.config import Config, pass_config
-from consulns.const import CLICK_CONSUL_CTX_KEY, CONSUL_PATH_CURRENT_ZONE, CONSUL_PATH_ZONE_INFO, CONSUL_PATH_ZONE_STAGING, CONSUL_PATH_ZONES
+from consulns.const import CLICK_CONSUL_CTX_KEY, CONSUL_PATH_CURRENT_ZONE, CONSUL_PATH_ZONE_INFO, CONSUL_PATH_ZONE_RECORDS, CONSUL_PATH_ZONE_STAGING, CONSUL_PATH_ZONES, CLICK_ZONE_CTX_KEY
 
 class ZoneAlreadyExists(Exception):
     pass
@@ -101,7 +100,12 @@ class RecordType(Enum):
     A = "A"
     AAAA = "AAAA"
     CNAME = "CNAME"
+    MX = "MX"
+
     CONSUL = "CONSUL"
+
+    def __str__(self) -> str:
+        return f"IN {self.value}"
 
 class Record(BaseModel):
     id: UUID4 = uuid4()
@@ -129,10 +133,6 @@ class AddRecord(BaseModel):
     def key(self) -> str:
         return f"add.{self.record.key}"
 
-    @property
-    def pretty_str(self) -> str:
-        return f"ADD\t{self.record.pretty_str}"
-
 class DelRecord(BaseModel):
     change_type: Literal['del'] = 'del'
     id: UUID4
@@ -141,10 +141,6 @@ class DelRecord(BaseModel):
     def key(self) -> str:
         id = b64encode(str(self.id).encode('utf-8')).decode('utf-8')
         return f"del.{id}"
-
-    @property
-    def pretty_str(self) -> str:
-        return f"DEL\t{self.id}"
     
 class Change(BaseModel):
     update: Union[AddRecord, DelRecord] = Field(discriminator='change_type')
@@ -153,16 +149,13 @@ class Change(BaseModel):
     def key(self) -> str:
         return self.update.key
 
-    @property
-    def pretty_str(self) -> str:
-        return self.update.pretty_str
-
 class Zone:
     def __init__(self, consul: Consul, zone_name: str) -> None:
         self._consul = consul
         self._zone_name = zone_name
         self.__info = None
         self.__staging = None
+        self.__records = None
 
     @property
     def name(self) -> str:
@@ -222,7 +215,13 @@ class Zone:
 
     def add_record(self, record: Record) -> None:
         add_record = AddRecord(record=record)
-        change = Change(update=add_record, date=datetime.now())
+        change = Change(update=add_record)
+        self._staging.changes[change.key] = change
+        self._update_staging()
+
+    def del_record(self, record: Record) -> None:
+        add_record = DelRecord(id=record.id)
+        change = Change(update=add_record)
         self._staging.changes[change.key] = change
         self._update_staging()
 
@@ -234,6 +233,52 @@ class Zone:
                 return
 
         raise MissingChange(id)
+
+    class Records(BaseModel):
+        records: Dict[UUID4, Record] = {}
+
+    @property
+    def _records(self) -> Records:
+        if self.__records is None:
+            records_path = self._compute_path(CONSUL_PATH_ZONE_RECORDS)
+            _, records = self._consul._kv_get(records_path, self.Records)
+            if records is None:
+               records = self.Records()
+            self.__records = records
+
+        return self.__records
+
+    def _update_records(self) -> None:
+        records_path = self._compute_path(CONSUL_PATH_ZONE_RECORDS)
+        self._consul._kv_set(records_path, self._records)
+
+    @property
+    def records(self) -> Iterator[Record]:
+        for id, r in self._records.records.items():
+            assert r.id == id
+            yield r
+
+    def record(self, id: UUID4) -> Record | None:
+        if id in self._records.records:
+            return self._records.records[id]
+
+        return None
+
+    def commit(self) -> None:
+        for c in self.changes:
+            updt = c.update
+            if updt.change_type == 'add':
+                self._records.records[updt.record.id] = updt.record
+            elif updt.change_type == 'del':
+                del self._records.records[updt.id]
+            else:
+                assert False
+        # First, apply the changes to the records object.
+        # If this fails, staging changes are preserved and the operation can be re-attempted.
+        self._update_records()
+
+        self._staging.changes.clear()
+        self._update_staging()
 
 # The consul client is constructed lazyly as not all commands require it.
 def pass_consul(f):
@@ -250,5 +295,25 @@ def pass_consul(f):
             pass
 
         return ctx.invoke(f, ctx.obj[CLICK_CONSUL_CTX_KEY], *args, **kwargs)
+
+    return update_wrapper(new_func, f)
+
+class NoZoneSelected(Exception):
+    pass
+
+# The zone client is constructed lazyly as not all commands require it.
+def pass_zone(f):
+    @pass_consul
+    @click.pass_context
+    def new_func(ctx, consul: Consul, *args, **kwargs):
+        if CLICK_ZONE_CTX_KEY not in ctx.obj:
+            cz = consul.current_zone()
+            if cz is None:
+                raise NoZoneSelected()
+
+            ctx.obj[CLICK_ZONE_CTX_KEY] = cz
+            pass
+
+        return ctx.invoke(f, ctx.obj[CLICK_ZONE_CTX_KEY ], *args, **kwargs)
 
     return update_wrapper(new_func, f)
