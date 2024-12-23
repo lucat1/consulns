@@ -18,7 +18,7 @@ def status(zone: Zone):
     cli_name = click.get_current_context().find_root().info_name
     click.echo(f"On zone {zone.name}")
     changes = []
-    for change in zone.changes:
+    for change in zone.stage.changes:
         fg = "green" if change.update.change_type == "add" else "red"
         if change.update.change_type == "add":
             r = change.update.record
@@ -55,7 +55,7 @@ def add(zone: Zone, record: str, record_type: RecordType, value: str, ttl: int):
         value=value,
         ttl=ttl,
     )
-    zone.add_record(r)
+    zone.stage.add_record(r)
     click.echo(f"On zone {zone.name}")
     click.echo("Added record:")
     click.secho(
@@ -75,7 +75,7 @@ def delete(zone: Zone, id: UUID4):
     if r is None:
         raise MissingRecord(id)
 
-    zone.del_record(r)
+    zone.stage.del_record(r)
     click.echo(f"On zone {zone.name}")
     click.echo("Deleted record:")
     click.secho(
@@ -87,14 +87,14 @@ def delete(zone: Zone, id: UUID4):
 @click.argument("id", type=int)
 @pass_zone
 def revert(zone: Zone, id: int):
-    zone.revert(id)
+    zone.stage.revert(id)
     click.secho(f"Reverted staged change {id}", fg="yellow")
 
 
 @stage.command()
 @pass_zone
 def commit(zone: Zone):
-    l = len(list(zone.changes))
+    l = len(list(zone.stage.changes))
     click.secho(
         f"Committing {l} change{'s' if l > 1 else ''} to zone {zone.name}...",
         fg="yellow",

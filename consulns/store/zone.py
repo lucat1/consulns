@@ -1,27 +1,26 @@
 from __future__ import annotations
 
-from base64 import b64encode
-from enum import Enum
-from consul import Consul as ConsulClient
-from typing import TYPE_CHECKING, Iterator, Literal, Tuple, TypedDict, Set, Union, Dict
-from uuid import uuid4
-from pydantic import UUID4, Field, IPvAnyAddress, TypeAdapter, BaseModel
+from typing import TYPE_CHECKING, Iterator, Dict
+from pydantic import UUID4, BaseModel
+
+from consulns.store.record import Record
+from consulns.store.stage import Stage
 
 if TYPE_CHECKING:
-    from consulns.store import Consul
+    from consulns.store.consul import Consul
 
 from consulns.const import (
     CONSUL_PATH_ZONE_INFO,
     CONSUL_PATH_ZONE_RECORDS,
-    CONSUL_PATH_ZONE_STAGING,
 )
+
 
 class Zone:
     def __init__(self, consul: Consul, zone_name: str) -> None:
         self._consul = consul
         self._zone_name = zone_name
         self.__info = None
-        self.__staging = None
+        self.__stage = None
         self.__records = None
 
     @property
@@ -57,49 +56,12 @@ class Zone:
         self._info.serial = serial
         return self._update_info()
 
-    class Staging(BaseModel):
-        changes: Dict[str, Change] = {}
-
     @property
-    def _staging(self) -> Staging:
-        if self.__staging is None:
-            staging_path = self._compute_path(CONSUL_PATH_ZONE_STAGING)
-            _, staging = self._consul._kv_get(staging_path, self.Staging)
-            if staging is None:
-                staging = self.Staging()
-            self.__staging = staging
+    def stage(self) -> Stage:
+        if self.__stage is None:
+            self.__stage = Stage(self)
 
-        return self.__staging
-
-    def _update_staging(self) -> None:
-        staging_path = self._compute_path(CONSUL_PATH_ZONE_STAGING)
-        self._consul._kv_set(staging_path, self._staging)
-
-    @property
-    def changes(self) -> Iterator[Change]:
-        for value in self._staging.changes.values():
-            yield value
-
-    def add_record(self, record: Record) -> None:
-        add_record = AddRecord(record=record)
-        change = Change(update=add_record)
-        self._staging.changes[change.key] = change
-        self._update_staging()
-
-    def del_record(self, record: Record) -> None:
-        add_record = DelRecord(id=record.id)
-        change = Change(update=add_record)
-        self._staging.changes[change.key] = change
-        self._update_staging()
-
-    def revert(self, id: int) -> None:
-        for i, change in enumerate(self.changes):
-            if i == id:
-                del self._staging.changes[change.key]
-                self._update_staging()
-                return
-
-        raise MissingChange(id)
+        return self.__stage
 
     class Records(BaseModel):
         records: Dict[UUID4, Record] = {}
@@ -132,7 +94,7 @@ class Zone:
         return None
 
     def commit(self) -> None:
-        for c in self.changes:
+        for c in self.stage.changes:
             updt = c.update
             if updt.change_type == "add":
                 self._records.records[updt.record.id] = updt.record
@@ -144,5 +106,4 @@ class Zone:
         # If this fails, staging changes are preserved and the operation can be re-attempted.
         self._update_records()
 
-        self._staging.changes.clear()
-        self._update_staging()
+        self.stage.clear()

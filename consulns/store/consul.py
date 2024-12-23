@@ -1,10 +1,8 @@
-from base64 import b64encode
 from consul import Consul as ConsulClient
-from typing import Iterator, Literal, Tuple, TypedDict, Set, Union
-from pydantic import UUID4, Field, TypeAdapter, BaseModel
+from typing import Iterator, Tuple, TypedDict, Set
+from pydantic import TypeAdapter, BaseModel
 
 from consulns.store.zone import Zone
-from consulns.store.record import Record
 
 from consulns.const import (
     CONSUL_PATH_CURRENT_ZONE,
@@ -16,15 +14,11 @@ class ZoneAlreadyExists(Exception):
     pass
 
 
-class ZoneDoesNotExist(Exception):
+class MissingZone(Exception):
     pass
 
 
 class KeyNotInserted(Exception):
-    pass
-
-
-class MissingChange(Exception):
     pass
 
 
@@ -88,7 +82,7 @@ class Consul:
             if zone.name == zone_name:
                 return zone
 
-        raise ZoneDoesNotExist(zone_name)
+        raise MissingZone(zone_name)
 
     class CurrentZone(BaseModel):
         zone: str
@@ -103,34 +97,3 @@ class Consul:
     def use_zone(self, zone: "Zone") -> None:
         cz = self.CurrentZone(zone=zone.name)
         self._kv_set(CONSUL_PATH_CURRENT_ZONE, cz)
-
-
-
-
-class AddRecord(BaseModel):
-    change_type: Literal["add"] = "add"
-    record: Record
-
-    @property
-    def key(self) -> str:
-        return f"add.{self.record.key}"
-
-
-class DelRecord(BaseModel):
-    change_type: Literal["del"] = "del"
-    id: UUID4
-
-    @property
-    def key(self) -> str:
-        id = b64encode(str(self.id).encode("utf-8")).decode("utf-8")
-        return f"del.{id}"
-
-
-class Change(BaseModel):
-    update: Union[AddRecord, DelRecord] = Field(discriminator="change_type")
-
-    @property
-    def key(self) -> str:
-        return self.update.key
-
-

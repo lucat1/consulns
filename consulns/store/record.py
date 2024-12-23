@@ -3,6 +3,7 @@ from pydantic import UUID4, IPvAnyAddress, BaseModel
 from uuid import uuid4
 from base64 import b64encode
 
+
 class RecordType(Enum):
     A = "A"
     AAAA = "AAAA"
