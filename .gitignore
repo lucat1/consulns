@@ -11,3 +11,5 @@ latest.log
 /debian/files
 /debian/tmp/
 /debian/autoca/
+
+example/
