@@ -9,7 +9,7 @@ from functools import update_wrapper
 from pydantic import UUID4, Field, IPvAnyAddress, PastDatetime, TypeAdapter, BaseModel
 
 from consulns.client.config import Config, pass_config
-from consulns.const import CLICK_CONSUL_CTX_KEY, CONSUL_PATH_ZONE_INFO, CONSUL_PATH_ZONE_STAGING, CONSUL_PATH_ZONES
+from consulns.const import CLICK_CONSUL_CTX_KEY, CONSUL_PATH_CURRENT_ZONE, CONSUL_PATH_ZONE_INFO, CONSUL_PATH_ZONE_STAGING, CONSUL_PATH_ZONES
 
 class ZoneAlreadyExists(Exception):
     pass
@@ -82,6 +82,20 @@ class Consul:
                 return zone
 
         raise ZoneDoesNotExist(zone_name)
+
+    class CurrentZone(BaseModel):
+        zone: str
+
+    def current_zone(self) -> "Zone | None":
+        _, val = self._kv_get(CONSUL_PATH_CURRENT_ZONE, self.CurrentZone)
+        if val is None:
+            return None
+        
+        return self.zone(val.zone)
+
+    def use_zone(self, zone: "Zone") -> None:
+        cz = self.CurrentZone(zone=zone.name)
+        self._kv_set(CONSUL_PATH_CURRENT_ZONE, cz)
 
 class RecordType(Enum):
     A = "A"
