@@ -3,7 +3,8 @@ from tabulate import tabulate
 from validators import domain as validate_domain
 
 from consulns.client.cli import cli
-from consulns.client.consul import pass_consul, pass_zone, Consul, Zone
+from consulns.client.ctx import pass_consul, pass_zone
+from consulns.store import Consul, Zone
 
 @cli.group()
 def zone():

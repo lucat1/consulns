@@ -1,14 +1,11 @@
 from base64 import b64encode
 from enum import Enum
+from consul import Consul as ConsulClient
 from typing import Iterator, Literal, Tuple, TypedDict, Set, Union, Dict
 from uuid import uuid4
-import click
-from consul import Consul as ConsulClient
-from functools import update_wrapper
 from pydantic import UUID4, Field, IPvAnyAddress, TypeAdapter, BaseModel
 
-from consulns.client.config import Config, pass_config
-from consulns.const import CLICK_CONSUL_CTX_KEY, CONSUL_PATH_CURRENT_ZONE, CONSUL_PATH_ZONE_INFO, CONSUL_PATH_ZONE_RECORDS, CONSUL_PATH_ZONE_STAGING, CONSUL_PATH_ZONES, CLICK_ZONE_CTX_KEY
+from consulns.const import CONSUL_PATH_CURRENT_ZONE, CONSUL_PATH_ZONE_INFO, CONSUL_PATH_ZONE_RECORDS, CONSUL_PATH_ZONE_STAGING, CONSUL_PATH_ZONES
 
 class ZoneAlreadyExists(Exception):
     pass
@@ -24,7 +21,7 @@ class MissingChange(Exception):
 
 class Consul:
     def __init__(self, client: ConsulClient) -> None:
-        self.client = client
+        self._client = client
 
     class Value(TypedDict):
         LockIndex: int
@@ -37,8 +34,8 @@ class Consul:
     _value_ta = TypeAdapter(Value)
 
     def _kv_get[T: BaseModel](self, key: str, t: type[T]) -> Tuple[int, T | None]:
-        self.client.kv
-        idx, raw_value = self.client.kv.get(key)
+        self._client.kv
+        idx, raw_value = self._client.kv.get(key)
         if raw_value is None:
             return idx, None
 
@@ -47,7 +44,7 @@ class Consul:
         return idx, result
 
     def _kv_set(self, key: str, t: BaseModel) -> None:
-        success = self.client.kv.put(key, t.model_dump_json())
+        success = self._client.kv.put(key, t.model_dump_json())
         if not success:
             raise KeyNotInserted()
 
@@ -279,41 +276,3 @@ class Zone:
 
         self._staging.changes.clear()
         self._update_staging()
-
-# The consul client is constructed lazyly as not all commands require it.
-def pass_consul(f):
-    @pass_config
-    @click.pass_context
-    def new_func(ctx, config: Config, *args, **kwargs):
-        if CLICK_CONSUL_CTX_KEY not in ctx.obj:
-            scheme = config.consul_addr.scheme
-            host = config.consul_addr.host
-            port = config.consul_addr.port
-            ctx.obj[CLICK_CONSUL_CTX_KEY] = Consul(
-                ConsulClient(scheme=scheme, host=host, port=port)
-            )
-            pass
-
-        return ctx.invoke(f, ctx.obj[CLICK_CONSUL_CTX_KEY], *args, **kwargs)
-
-    return update_wrapper(new_func, f)
-
-class NoZoneSelected(Exception):
-    pass
-
-# The zone client is constructed lazyly as not all commands require it.
-def pass_zone(f):
-    @pass_consul
-    @click.pass_context
-    def new_func(ctx, consul: Consul, *args, **kwargs):
-        if CLICK_ZONE_CTX_KEY not in ctx.obj:
-            cz = consul.current_zone()
-            if cz is None:
-                raise NoZoneSelected()
-
-            ctx.obj[CLICK_ZONE_CTX_KEY] = cz
-            pass
-
-        return ctx.invoke(f, ctx.obj[CLICK_ZONE_CTX_KEY ], *args, **kwargs)
-
-    return update_wrapper(new_func, f)

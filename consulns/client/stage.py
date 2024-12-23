@@ -3,8 +3,8 @@ from pydantic import UUID4
 from tabulate import tabulate
 
 from consulns.client.cli import cli
-from consulns.client.consul import Record, RecordType, Zone
-from consulns.client.zone import pass_zone
+from consulns.store import Record, RecordType, Zone
+from consulns.client.ctx import pass_zone
 
 @cli.group()
 def stage():
