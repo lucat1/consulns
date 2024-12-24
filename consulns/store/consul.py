@@ -1,5 +1,6 @@
 from consul import Consul as ConsulClient
 from typing import Iterator, Tuple, TypedDict, Set
+from dns.name import Name as DNSName, from_text as dns_from_text
 from pydantic import TypeAdapter, BaseModel
 
 from consulns.store.zone import Zone
@@ -53,31 +54,32 @@ class Consul:
         if not success:
             raise KeyNotInserted()
 
-    class ZoneNames(BaseModel):
+    class ZoneDNSNames(BaseModel):
         zones: Set[str]
 
-    def _zone_names(self) -> ZoneNames:
-        _, zones = self._kv_get(CONSUL_PATH_ZONES, self.ZoneNames)
+    def _zone_names(self) -> ZoneDNSNames:
+        _, zones = self._kv_get(CONSUL_PATH_ZONES, self.ZoneDNSNames)
         if zones is None:
-            zones = self.ZoneNames(zones=set())
+            zones = self.ZoneDNSNames(zones=set())
         return zones
 
     @property
     def zones(self) -> Iterator[Zone]:
         zone_names = self._zone_names()
         for zone_name in zone_names.zones:
-            yield Zone(self, zone_name)
+            yield Zone(self, dns_from_text(zone_name))
 
     def add_zone(self, zone: "Zone") -> None:
+        assert zone.name[-1] != "."
         zone_names = self._zone_names()
         if zone.name in zone_names.zones:
             raise ZoneAlreadyExists(zone.name)
 
-        zone_names.zones.add(zone.name)
-        z = self.ZoneNames(zones=zone_names.zones)
+        zone_names.zones.add(str(zone.name))
+        z = self.ZoneDNSNames(zones=zone_names.zones)
         self._kv_set(CONSUL_PATH_ZONES, z)
 
-    def zone(self, zone_name: str) -> "Zone":
+    def zone(self, zone_name: DNSName) -> "Zone":
         for zone in self.zones:
             if zone.name == zone_name:
                 return zone
@@ -92,8 +94,8 @@ class Consul:
         if val is None:
             return None
 
-        return self.zone(val.zone)
+        return self.zone(dns_from_text(val.zone))
 
     def use_zone(self, zone: "Zone") -> None:
-        cz = self.CurrentZone(zone=zone.name)
+        cz = self.CurrentZone(zone=str(zone.name))
         self._kv_set(CONSUL_PATH_CURRENT_ZONE, cz)

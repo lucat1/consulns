@@ -1,6 +1,6 @@
 import click
+from dns.name import Name as DNSName, from_text as dns_from_text
 from tabulate import tabulate
-from validators import domain as validate_domain
 
 from consulns.client.cli import cli
 from consulns.client.ctx import pass_consul, pass_zone
@@ -27,11 +27,9 @@ class InvalidDomain(Exception):
 
 
 @zone.command()
-@click.argument("zone_name", type=str)
+@click.argument("zone_name", type=dns_from_text)
 @pass_consul
-def add(consul: Consul, zone_name: str):
-    if not validate_domain(zone_name):
-        raise InvalidDomain(zone_name)
+def add(consul: Consul, zone_name: DNSName):
     consul.add_zone(Zone(consul, zone_name))
     click.secho(f"Zone added: {zone_name}", fg="green")
 
@@ -64,9 +62,9 @@ def show(zone: Zone):
 
 
 @zone.command()
-@click.argument("zone_name", type=str)
+@click.argument("zone_name", type=dns_from_text)
 @pass_consul
-def use(consul: Consul, zone_name: str):
+def use(consul: Consul, zone_name: DNSName):
     # Make sure the zone actually exists
     zone = consul.zone(zone_name)
     consul.use_zone(zone)

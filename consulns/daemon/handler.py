@@ -1,41 +1,106 @@
-from socket import AddressInfo, socket
+from socket import socket
 from pydantic import ValidationError
 from structlog import get_logger
 
-from consulns.daemon.proto import Message, MessageAdapter
+from consulns.daemon.proto import (
+    DomainInfo,
+    GetAllDomainsParameters,
+    InitializeParameters,
+    LookupParameters,
+    Query,
+    Response,
+    QueryAdapter,
+    ZoneKind,
+)
+from consulns.daemon.store import Store
 
 dlog = get_logger()
 id_cnt = 0
 
+
 class Handler:
     __id_cnt = 0
 
-    def __init__(self, sock: socket) -> None:
-        self.id = Handler.__id_cnt
+    def __init__(self, sock: socket, store: Store) -> None:
+        self._id = Handler.__id_cnt
         Handler.__id_cnt += 1
 
-        self.log = dlog.bind(conn_id=id)
-        self.sock = sock
+        self._log = dlog.bind(conn_id=id)
+        self._sock = sock
+        self._store = store
 
     def handle(self) -> None:
-        self.log.info("connection enstablished")
+        self._log.info("connection enstablished")
         try:
-            with self.sock.makefile('rb') as f:
+            with self._sock.makefile("rb") as f:
                 while True:
-                    raw_msg = f.readline()
-                    if raw_msg is None or len(raw_msg) == 0:
+                    raw_query = f.readline()
+                    if raw_query is None or len(raw_query) == 0:
                         break
-                    self.log.debug("received raw message", raw_msg=raw_msg)
+                    self._log.debug("received raw query", raw_msg=raw_query)
                     try:
-                        msg = MessageAdapter.validate_json(raw_msg)
+                        query = QueryAdapter.validate_json(raw_query)
                     except ValidationError as err:
-                        self.log.error("invalid message", raw_msg=raw_msg, err=err)
+                        self._log.error(
+                            "invalid query", raw_msg=raw_query, err=err
+                        )
                         continue
 
-                    self.handle_msg(msg)
+                    try:
+                        self.handle_query(query)
+                    except Exception as err:
+                        self._log.error(
+                            "error while handling query", query=query, err=err
+                        )
         finally:
-            self.log.info("connection closed")
-            self.sock.close()
+            self._log.info("connection closed")
+            self._sock.close()
 
-    def handle_msg(self, msg: Message) -> None:
-        self.log.debug("received message", msg=msg)
+    def reply(self, resp: Response) -> None:
+        try:
+            json = resp.model_dump_json()
+            self._sock.sendall(json.encode("utf-8"))
+        except Exception as err:
+            self._log.error(
+                "error while serializing response", response=resp, err=err
+            )
+
+    def handle_query(self, msg: Query) -> None:
+        self._log.debug("received message", msg=msg)
+        match msg.method:
+            case "initialize":
+                self.handle_initialize(msg.parameters)
+            case "getAllDomains":
+                self.handle_get_all_domains(msg.parameters)
+            case "lookup":
+                self.handle_lookup(msg.parameters)
+            case _:
+                assert False
+
+    def handle_initialize(self, _: InitializeParameters):
+        self.reply(Response(result=True))
+
+    def handle_get_all_domains(self, params: GetAllDomainsParameters):
+        domains = [
+            DomainInfo(
+                id=i,
+                zone=str(zone.name),
+                serial=zone.serial,
+                notified_serial=zone.notified_serial,
+                last_check=zone.last_check,
+                kind=ZoneKind.MASTER,
+            )
+            for i, zone in self._store.zones
+            if params.include_disabled or zone.enabled
+        ]
+        self._log.info("filtered out domains", domains=domains)
+        self.reply(Response(result=domains))
+
+    def handle_lookup(self, params: LookupParameters):
+        if params.zone_id is not None and params.zone_id != -1:
+            zone = self._store.zone_by_id(params.zone_id)
+        else:
+            zone = self._store.zone(params.zone_id)
+
+        zone.lookup()
+        self.reply(Response(result=True))

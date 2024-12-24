@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Iterator, Dict
+from dns.name import Name as DNSName
 from pydantic import UUID4, BaseModel
 
 from consulns.store.record import Record
@@ -16,7 +18,7 @@ from consulns.const import (
 
 
 class Zone:
-    def __init__(self, consul: Consul, zone_name: str) -> None:
+    def __init__(self, consul: Consul, zone_name: DNSName) -> None:
         self._consul = consul
         self._zone_name = zone_name
         self.__info = None
@@ -24,11 +26,14 @@ class Zone:
         self.__records = None
 
     @property
-    def name(self) -> str:
+    def name(self) -> DNSName:
         return self._zone_name
 
     class ZoneInfo(BaseModel):
         serial: int = 0
+        notified_serial: int = serial
+        enabled: bool = True
+        last_check: datetime = datetime.now()
 
     def _compute_path(self, path: str) -> str:
         return path.format(zone=self.name)
@@ -54,6 +59,30 @@ class Zone:
 
     def set_serial(self, serial: int) -> None:
         self._info.serial = serial
+        return self._update_info()
+
+    @property
+    def enabled(self) -> bool:
+        return self._info.enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        self._info.enabled = enabled
+        return self._update_info()
+
+    @property
+    def last_check(self) -> datetime:
+        return self._info.last_check
+
+    def set_last_check(self, last_check: datetime) -> None:
+        self._info.last_check = last_check
+        return self._update_info()
+
+    @property
+    def notified_serial(self) -> int:
+        return self._info.notified_serial
+
+    def set_notified_serial(self, notified_serial: int) -> None:
+        self._info.notified_serial = notified_serial
         return self._update_info()
 
     @property
