@@ -1,8 +1,10 @@
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, List as TList, Literal, Optional, Union
-from pydantic import BaseModel, Field, IPvAnyAddress, TypeAdapter
+from typing import Annotated, List as TList, Literal, Optional, Dict
+from pydantic import BaseModel, Field, TypeAdapter
+
+from consulns.store.zone import AddKey, Key
 
 
 class InitializeParameters(BaseModel):
@@ -23,13 +25,13 @@ class GetAllDomains(BaseModel):
     parameters: GetAllDomainsParameters
 
 
-class GetAllDomainMetadataParameters(BaseModel):
+class GetDomainInfoParameters(BaseModel):
     name: str
 
 
-class GetAllDomainMetadata(BaseModel):
-    method: Literal["getAllDomainMetadata"]
-    parameters: GetAllDomainMetadataParameters
+class GetDomainInfo(BaseModel):
+    method: Literal["getDomainInfo"]
+    parameters: GetDomainInfoParameters
 
 
 class QType(Enum):
@@ -40,6 +42,7 @@ class QType(Enum):
     AAAA = "AAAA"
     CNAME = "CNAME"
     MX = "MX"
+    NS = "NS"
 
 
 class LookupParameters(BaseModel):
@@ -63,6 +66,36 @@ class List(BaseModel):
     parameters: ListParameters
 
 
+class GetAllDomainMetadataParameters(BaseModel):
+    name: str
+
+
+class GetAllDomainMetadata(BaseModel):
+    method: Literal["getAllDomainMetadata"]
+    parameters: GetAllDomainMetadataParameters
+
+
+class GetDomainMetadataParameters(BaseModel):
+    name: str
+    kind: str
+
+
+class GetDomainMetadata(BaseModel):
+    method: Literal["getDomainMetadata"]
+    parameters: GetDomainMetadataParameters
+
+
+class SetDomainMetadataParameters(BaseModel):
+    name: str
+    kind: str
+    value: TList[str]
+
+
+class SetDomainMetadata(BaseModel):
+    method: Literal["setDomainMetadata"]
+    parameters: SetDomainMetadataParameters
+
+
 class GetDomainKeysParameters(BaseModel):
     name: str
 
@@ -72,14 +105,71 @@ class GetDomainKeys(BaseModel):
     parameters: GetDomainKeysParameters
 
 
+class AddDomainKeyParameters(BaseModel):
+    name: str
+    key: AddKey
+
+
+class AddDomainKey(BaseModel):
+    method: Literal["addDomainKey"]
+    parameters: AddDomainKeyParameters
+
+
+class RemoveDomainKeyParameters(BaseModel):
+    name: str
+    id: int
+
+
+class RemoveDomainKey(BaseModel):
+    method: Literal["removeDomainKey"]
+    parameters: RemoveDomainKeyParameters
+
+
+class GetBeforeAndAfterNamesAbsoluteParameters(BaseModel):
+    qname: str
+
+
+class GetBeforeAndAfterNamesAbsolute(BaseModel):
+    method: Literal["getBeforeAndAfterNamesAbsolute"]
+    parameters: GetBeforeAndAfterNamesAbsoluteParameters
+
+
+class StartTransactionParameters(BaseModel):
+    domain: str
+    domain_id: int
+    trxid: int
+
+
+class StartTransaction(BaseModel):
+    method: Literal["startTransaction"]
+    parameters: StartTransactionParameters
+
+
+class CommitTransactionParameters(BaseModel):
+    trxid: int
+
+
+class CommitTransaction(BaseModel):
+    method: Literal["commitTransaction"]
+    parameters: CommitTransactionParameters
+
+
 # From: https://stackoverflow.com/a/78984348
 Query = (
     Initialize
     | GetAllDomains
+    | GetDomainInfo
     | Lookup
-    | GetAllDomainMetadata
     | List
+    | GetAllDomainMetadata
+    | GetDomainMetadata
+    | SetDomainMetadata
     | GetDomainKeys
+    | AddDomainKey
+    | RemoveDomainKey
+    | GetBeforeAndAfterNamesAbsolute
+    | StartTransaction
+    | CommitTransaction
 )
 QueryAdapter: TypeAdapter[Query] = TypeAdapter(
     Annotated[Query, Field(discriminator="method")]
@@ -109,5 +199,20 @@ class RecordInfo(BaseModel):
     auth: bool
 
 
+class BeforeAndAfterNames(BaseModel):
+    before: str
+    after: str
+    unhashed: str
+
+
 class Response(BaseModel):
-    result: Union[bool, TList[DomainInfo], TList[RecordInfo]]
+    result: (
+        bool
+        | TList[DomainInfo]
+        | DomainInfo
+        | TList[RecordInfo]
+        | TList[Key]
+        | Dict[str, TList[str]]
+        | TList[str]
+        | BeforeAndAfterNames
+    )

@@ -1,5 +1,4 @@
 from collections import defaultdict
-from datetime import datetime
 from typing import Dict, Iterator, List, Tuple
 
 from consul import Consul as ConsulClient
@@ -16,6 +15,7 @@ qtype2rtype = {
     QType.AAAA: RecordType.AAAA,
     QType.CNAME: RecordType.CNAME,
     QType.MX: RecordType.MX,
+    QType.NS: RecordType.NS,
 }
 
 rtype2qtype = {
@@ -23,6 +23,7 @@ rtype2qtype = {
     RecordType.AAAA: QType.AAAA,
     RecordType.CNAME: QType.CNAME,
     RecordType.MX: QType.MX,
+    RecordType.NS: QType.NS,
 }
 
 
@@ -34,39 +35,23 @@ class CachedZone:
         self._records = records
 
     @property
-    def name(self) -> DNSName:
-        return self._zone.name
-
-    @property
-    def serial(self) -> int:
-        return self._zone.serial
-
-    @property
-    def notified_serial(self) -> int:
-        return self._zone.notified_serial
-
-    @property
-    def enabled(self) -> bool:
-        return self._zone.enabled
-
-    @property
-    def last_check(self) -> datetime:
-        return self._zone.last_check
+    def zone(self) -> Zone:
+        return self._zone
 
     @property
     def soa(self) -> RecordInfo:
-        qname_str = self.name.to_text()
+        qname_str = self._zone.name.to_text()
         return RecordInfo(
             qname=qname_str,
             qtype=QType.SOA,
             # TODO: properly do the SOA record
-            content=f"ns1.{qname_str} root.{qname_str} {self.serial} 7200 3600 1209600 3600",
+            content=f"ns1.{qname_str} root.{qname_str} {self._zone.serial} 7200 3600 1209600 3600",
             ttl=300,
             auth=True,
         )
 
     @property
-    def _all_records(self) -> Iterator[Tuple[DNSName, Record]]:
+    def raw_records(self) -> Iterator[Tuple[DNSName, Record]]:
         return (
             (domain, record)
             for domain, records in self._records.items()
@@ -85,18 +70,17 @@ class CachedZone:
             auth=True,
         )
 
+    @property
     def records(self) -> Iterator[Tuple[DNSName, RecordInfo]]:
-        yield (self.name, self.soa)
-        return (
-            (domain, self._record_info(domain, record))
-            for domain, record in self._all_records
-        )
+        yield (self._zone.name, self.soa)
+        for domain, record in self.raw_records:
+            yield domain, self._record_info(domain, record)
 
     def lookup(self, qtype: QType, qname: DNSName) -> Iterator[RecordInfo]:
         # Handle queries such as *.example.com
         sub, _ = qname.split(1)
         if sub == "*":
-            records = self._all_records
+            records = self.raw_records
 
         records = map(lambda r: (qname, r), self._records[qname])
 
@@ -108,8 +92,14 @@ class CachedZone:
                 return r.record_type == rtype
 
         # Return SOA on ANY/SOA on @
-        if qname == self.name and (qtype == QType.ANY or qtype == QType.SOA):
+        if qname == self._zone.name and (
+            qtype == QType.ANY or qtype == QType.SOA
+        ):
             yield self.soa
+
+        if qtype == QType.SOA:
+            # We are done already
+            return
 
         filtered = (
             (domain, record)
@@ -174,12 +164,17 @@ class Cache:
 
         return None
 
-    def zone_by_qname(self, domain: DNSName) -> Tuple[int, CachedZone | None]:
+    def zone_by_qname(
+        self, domain: DNSName, exact: bool = False
+    ) -> Tuple[int, CachedZone | None]:
         best_cz = None
         best_i = -1
         best_len = 0
         for zdom, (i, cz) in self._czs.items():
-            if domain.is_subdomain(zdom) and len(zdom) > best_len:
+            domain_match = (exact and zdom == domain) or (
+                not exact and domain.is_subdomain(zdom)
+            )
+            if domain_match and len(zdom) > best_len:
                 best_cz = cz
                 best_i = i
                 best_len = len(zdom)

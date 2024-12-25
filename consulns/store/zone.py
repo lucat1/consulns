@@ -19,12 +19,15 @@ from consulns.const import (
 )
 
 
-class Key(BaseModel):
-    id: int
+class AddKey(BaseModel):
     flags: int
     active: bool
     published: bool
     content: str
+
+
+class Key(AddKey):
+    id: int
 
 
 class Zone:
@@ -164,8 +167,8 @@ class Zone:
         return self.__metadata
 
     @property
-    def metadata(self) -> Metadata:
-        return self._metadata
+    def metadata(self) -> Dict[str, List[str]]:
+        return self._metadata.metadata
 
     def set_metadata(self, key: str, value: List[str]) -> None:
         self._metadata.metadata[key] = value
@@ -198,8 +201,17 @@ class Zone:
 
         return None
 
-    def add_key(self, key: Key) -> None:
-        self._keys.keys.append(key)
+    def add_key(self, key: AddKey) -> None:
+        id = len(self._keys.keys)
+        self._keys.keys.append(
+            Key(
+                id=id,
+                flags=key.flags,
+                active=key.active,
+                published=key.published,
+                content=key.content,
+            )
+        )
         keys_path = self._compute_path(CONSUL_PATH_ZONE_KEYS)
         self._consul._kv_set(keys_path, self._keys)
 

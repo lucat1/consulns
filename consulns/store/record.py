@@ -9,6 +9,7 @@ class RecordType(Enum):
     AAAA = "AAAA"
     CNAME = "CNAME"
     MX = "MX"
+    NS = "NS"
 
     CONSUL = "CONSUL"
 

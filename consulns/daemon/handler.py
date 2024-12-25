@@ -1,21 +1,31 @@
 from socket import socket
+from typing import Tuple
 from pydantic import ValidationError
 from structlog import get_logger
 from dns.name import from_text as dns_from_text
+from itertools import cycle
 
 from consulns.daemon.proto import (
+    AddDomainKeyParameters,
+    BeforeAndAfterNames,
     DomainInfo,
     GetAllDomainMetadataParameters,
     GetAllDomainsParameters,
+    GetBeforeAndAfterNamesAbsoluteParameters,
+    GetDomainInfoParameters,
+    GetDomainKeysParameters,
+    GetDomainMetadataParameters,
     InitializeParameters,
     ListParameters,
     LookupParameters,
     Query,
+    RemoveDomainKeyParameters,
     Response,
     QueryAdapter,
+    SetDomainMetadataParameters,
     ZoneKind,
 )
-from consulns.daemon.cache import Cache
+from consulns.daemon.cache import Cache, CachedZone
 
 dlog = get_logger()
 id_cnt = 0
@@ -81,12 +91,36 @@ class Handler:
                 self.handle_initialize(msg.parameters)
             case "getAllDomains":
                 self.handle_get_all_domains(msg.parameters)
-            case "getAllDomainMetadata":
-                self.handle_get_all_domain_metadata(msg.parameters)
+            case "getDomainInfo":
+                self.handle_get_domain_info(msg.parameters)
+
             case "lookup":
                 self.handle_lookup(msg.parameters)
             case "list":
                 self.handle_list(msg.parameters)
+
+            case "getAllDomainMetadata":
+                self.handle_get_all_domain_metadata(msg.parameters)
+            case "getDomainMetadata":
+                self.handle_get_domain_metadata(msg.parameters)
+            case "setDomainMetadata":
+                self.handle_set_domain_metadata(msg.parameters)
+
+            case "getDomainKeys":
+                self.handle_get_domain_keys(msg.parameters)
+            case "addDomainKey":
+                self.handle_add_domain_key(msg.parameters)
+            case "removeDomainKey":
+                self.handle_remove_domain_key(msg.parameters)
+            case "getBeforeAndAfterNamesAbsolute":
+                self.handle_get_before_and_after_names_absolute(msg.parameters)
+
+            # TODO: do we even need to handle transactions?
+            case "startTransaction":
+                self.reply(Response(result=True))
+            case "commitTransaction":
+                self.reply(Response(result=True))
+
             case _:
                 assert False
 
@@ -97,23 +131,29 @@ class Handler:
         domains = [
             DomainInfo(
                 id=i,
-                zone=zone.name.to_text(),
-                serial=zone.serial,
-                notified_serial=zone.notified_serial,
-                last_check=zone.last_check,
+                zone=zone._zone.name.to_text(),
+                serial=zone._zone.serial,
+                notified_serial=zone._zone.notified_serial,
+                last_check=zone._zone.last_check,
                 kind=ZoneKind.MASTER,
             )
             for i, zone in self._store.zones
-            if params.include_disabled or zone.enabled
+            if params.include_disabled or zone._zone.enabled
         ]
         self._log.info("filtered out domains", domains=domains)
         self.reply(Response(result=domains))
 
-    def handle_get_all_domain_metadata(
-        self, params: GetAllDomainMetadataParameters
-    ) -> None:
-        # TODO: get/set domain metadata
-        self.reply(Response(result=[]))
+    def handle_get_domain_info(self, params: GetDomainInfoParameters) -> None:
+        id, zone = self._get_zone_checked(params.name)
+        di = DomainInfo(
+            id=id,
+            zone=zone._zone.name.to_text(),
+            serial=zone._zone.serial,
+            notified_serial=zone._zone.notified_serial,
+            last_check=zone._zone.last_check,
+            kind=ZoneKind.MASTER,
+        )
+        self.reply(Response(result=di))
 
     def handle_lookup(self, params: LookupParameters) -> None:
         self._log.info(
@@ -129,7 +169,7 @@ class Handler:
             self._log.warning(
                 "lookup is requesting domain in missing zone", domain=qname
             )
-            self.reply(Response(result=[]))
+            self.reply(Response(result=False))
             return
 
         records = zone.lookup(params.qtype, qname)
@@ -137,25 +177,101 @@ class Handler:
         self.reply(Response(result=list(records)))
 
     def handle_list(self, params: ListParameters) -> None:
-        zonename = dns_from_text(params.zonename)
-        self._log.info(
-            "listing zone", zone=zonename, domain_id=params.domain_id
-        )
+        _, zone = self._get_zone_checked(params.zonename)
+        self._log.info("listing zone", zone=zone.zone.name)
 
-        # TODO: figure out whether `domain_id` is the zone id. PDNS has
-        # inconsistent naming all over the place.
-        if params.domain_id is not None and params.domain_id != -1:
-            zone = self._store.zone_by_id(params.domain_id)
+        self.reply(Response(result=[record for _, record in zone.records]))
+
+    def _get_zone_checked(self, zone: str) -> Tuple[int, CachedZone]:
+        zonename = dns_from_text(zone)
+        id, z = self._store.zone_by_qname(zonename, exact=True)
+        if z is None:
+            self._log.warinig("requested missing zone", zone=zonename)
+            assert False
+
+        return id, z
+
+    def handle_get_all_domain_metadata(
+        self, params: GetAllDomainMetadataParameters
+    ) -> None:
+        _, cz = self._get_zone_checked(params.name)
+        self.reply(Response(result=cz.zone.metadata))
+
+    def handle_get_domain_metadata(
+        self, params: GetDomainMetadataParameters
+    ) -> None:
+        _, cz = self._get_zone_checked(params.name)
+        metadata = cz.zone.metadata
+        if params.kind not in metadata:
+            result = []
         else:
-            _, zone = self._store.zone_by_qname(zonename)
+            result = metadata[params.kind]
+        self.reply(Response(result=result))
 
-        if zone is None:
-            self._log.warning("attempted to list missing zone", zone=zonename)
-            self.reply(Response(result=[]))
-            return
-
-        self.reply(Response(result=[record for _, record in zone.records()]))
+    def handle_set_domain_metadata(
+        self, params: SetDomainMetadataParameters
+    ) -> None:
+        _, cz = self._get_zone_checked(params.name)
+        cz.zone.set_metadata(params.kind, params.value)
+        self.reply(Response(result=True))
 
     # DNSSEC handlers
-    def handle_get_domain_keys(self, params: GetDomainKeysParams) -> None:
-        pass
+
+    def handle_get_domain_keys(self, params: GetDomainKeysParameters) -> None:
+        _, cz = self._get_zone_checked(params.name)
+
+        self.reply(Response(result=list(cz._zone.keys)))
+
+    def handle_add_domain_key(self, params: AddDomainKeyParameters) -> None:
+        _, cz = self._get_zone_checked(params.name)
+
+        cz.zone.add_key(params.key)
+        self.reply(Response(result=True))
+
+    def handle_remove_domain_key(
+        self, params: RemoveDomainKeyParameters
+    ) -> None:
+        _, cz = self._get_zone_checked(params.name)
+
+        if not any(key.id == params.id for key in cz.zone.keys):
+            self._log.warning(
+                "attempted to remove non-existing key", key_id=params.id
+            )
+            self.reply(Response(result=False))
+            return
+
+        cz.zone.remove_key(params.id)
+        self.reply(Response(result=True))
+
+    def handle_get_before_and_after_names_absolute(
+        self, params: GetBeforeAndAfterNamesAbsoluteParameters
+    ) -> None:
+        qname = dns_from_text(params.qname, origin=None)
+        _, zone = self._store.zone_by_qname(qname)
+        if zone is None:
+            self._log.warning(
+                "could not get before/after for missing zone", qname=qname
+            )
+            self.reply(Response(result=False))
+            return
+
+        records = cycle(zone.records)
+        before = None
+        for _, record in records:
+            cmp = dns_from_text(record.qname).relativize(zone.zone.name)
+            if cmp == params.qname and before is not None:
+                break
+
+            before = cmp
+        _, next_record = next(records)
+        after = dns_from_text(next_record.qname).relativize(zone.zone.name)
+
+        self.reply(
+            Response(
+                result=BeforeAndAfterNames(
+                    before=before.to_text() if before is not None else "",
+                    after=after.to_text() or "",
+                    unhashed="",
+                )
+            )
+        )
