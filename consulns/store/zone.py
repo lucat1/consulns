@@ -62,6 +62,14 @@ class Zone:
         return self._update_info()
 
     @property
+    def notified_serial(self) -> int:
+        return self._info.notified_serial
+
+    def set_notified_serial(self, notified_serial: int) -> None:
+        self._info.notified_serial = notified_serial
+        return self._update_info()
+
+    @property
     def enabled(self) -> bool:
         return self._info.enabled
 
@@ -75,14 +83,6 @@ class Zone:
 
     def set_last_check(self, last_check: datetime) -> None:
         self._info.last_check = last_check
-        return self._update_info()
-
-    @property
-    def notified_serial(self) -> int:
-        return self._info.notified_serial
-
-    def set_notified_serial(self, notified_serial: int) -> None:
-        self._info.notified_serial = notified_serial
         return self._update_info()
 
     @property

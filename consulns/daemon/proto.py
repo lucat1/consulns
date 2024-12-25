@@ -22,13 +22,25 @@ class GetAllDomains(BaseModel):
     method: Literal["getAllDomains"]
     parameters: GetAllDomainsParameters
 
+
+class GetAllDomainMetadataParameters(BaseModel):
+    name: str
+
+
+class GetAllDomainMetadata(BaseModel):
+    method: Literal["getAllDomainMetadata"]
+    parameters: GetAllDomainMetadataParameters
+
+
 class QType(Enum):
     ANY = "ANY"
+    SOA = "SOA"
 
     A = "A"
     AAAA = "AAAA"
     CNAME = "CNAME"
     MX = "MX"
+
 
 class LookupParameters(BaseModel):
     qname: str
@@ -42,7 +54,7 @@ class Lookup(BaseModel):
 
 
 # From: https://stackoverflow.com/a/78984348
-Query = Initialize | GetAllDomains | Lookup
+Query = Initialize | GetAllDomains | Lookup | GetAllDomainMetadata
 QueryAdapter: TypeAdapter[Query] = TypeAdapter(
     Annotated[Query, Field(discriminator="method")]
 )
@@ -63,5 +75,12 @@ class DomainInfo(BaseModel):
     kind: ZoneKind
 
 
+class RecordInfo(BaseModel):
+    qtype: QType
+    qname: str
+    content: str
+    ttl: int
+
+
 class Response(BaseModel):
-    result: bool | List[DomainInfo]
+    result: bool | List[DomainInfo] | List[RecordInfo]

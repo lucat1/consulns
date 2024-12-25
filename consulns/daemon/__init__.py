@@ -4,10 +4,10 @@ from threading import Thread
 from argparse import ArgumentParser
 from pathlib import Path
 from structlog import get_logger
-from sys import argv
 
 from consulns.daemon.config import Config
 from consulns.daemon.handler import Handler
+from consulns.daemon.cache import Cache
 
 log = get_logger()
 
@@ -23,6 +23,7 @@ def daemon():
 
     config = Config()
     log.info("loaded config", config=config)
+    cache = Cache(config)
 
     if socket_path.exists():
         log.warning("deleting old socket", path=socket_path)
@@ -36,7 +37,7 @@ def daemon():
     try:
         while True:
             sock, _ = srv.accept()
-            handler = Handler(sock, config)
+            handler = Handler(sock, cache)
             thr = Thread(target=handler.handle)
             thr.daemon = True
             thr.start()
