@@ -12,7 +12,7 @@ from consulns.daemon.cache import Cache
 log = get_logger()
 
 
-def daemon():
+def daemon() -> None:
     parser = ArgumentParser(
         prog="cnsd",
         description="ConsulNS daemon implementing PowerDNS remote backend",

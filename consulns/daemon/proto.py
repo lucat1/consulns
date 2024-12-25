@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, List as TList, Literal, Optional, Union
 from pydantic import BaseModel, Field, IPvAnyAddress, TypeAdapter
 
 
@@ -53,8 +53,34 @@ class Lookup(BaseModel):
     parameters: LookupParameters
 
 
+class ListParameters(BaseModel):
+    zonename: str
+    domain_id: int
+
+
+class List(BaseModel):
+    method: Literal["list"]
+    parameters: ListParameters
+
+
+class GetDomainKeysParameters(BaseModel):
+    name: str
+
+
+class GetDomainKeys(BaseModel):
+    method: Literal["getDomainKeys"]
+    parameters: GetDomainKeysParameters
+
+
 # From: https://stackoverflow.com/a/78984348
-Query = Initialize | GetAllDomains | Lookup | GetAllDomainMetadata
+Query = (
+    Initialize
+    | GetAllDomains
+    | Lookup
+    | GetAllDomainMetadata
+    | List
+    | GetDomainKeys
+)
 QueryAdapter: TypeAdapter[Query] = TypeAdapter(
     Annotated[Query, Field(discriminator="method")]
 )
@@ -80,7 +106,8 @@ class RecordInfo(BaseModel):
     qname: str
     content: str
     ttl: int
+    auth: bool
 
 
 class Response(BaseModel):
-    result: bool | List[DomainInfo] | List[RecordInfo]
+    result: Union[bool, TList[DomainInfo], TList[RecordInfo]]

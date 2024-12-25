@@ -62,6 +62,7 @@ class CachedZone:
             # TODO: properly do the SOA record
             content=f"ns1.{qname_str} root.{qname_str} {self.serial} 7200 3600 1209600 3600",
             ttl=300,
+            auth=True,
         )
 
     @property
@@ -78,6 +79,10 @@ class CachedZone:
             qtype=rtype2qtype[record.record_type],
             content=str(record.value),
             ttl=record.ttl,
+            # Figure out what `auth` exactly is.
+            # If it just means "authoritative", then we're always authoritative
+            # for these records.
+            auth=True,
         )
 
     def records(self) -> Iterator[Tuple[DNSName, RecordInfo]]:
@@ -102,7 +107,7 @@ class CachedZone:
                 rtype = qtype2rtype[qtype]
                 return r.record_type == rtype
 
-        # Return SOA on ANY on @
+        # Return SOA on ANY/SOA on @
         if qname == self.name and (qtype == QType.ANY or qtype == QType.SOA):
             yield self.soa
 

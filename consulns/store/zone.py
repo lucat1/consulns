@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Iterator, Dict
+from typing import TYPE_CHECKING, Iterator, Dict, List
 from dns.name import Name as DNSName
 from pydantic import UUID4, BaseModel
 
@@ -13,8 +13,18 @@ if TYPE_CHECKING:
 
 from consulns.const import (
     CONSUL_PATH_ZONE_INFO,
+    CONSUL_PATH_ZONE_KEYS,
+    CONSUL_PATH_ZONE_METADATA,
     CONSUL_PATH_ZONE_RECORDS,
 )
+
+
+class Key(BaseModel):
+    id: int
+    flags: int
+    active: bool
+    published: bool
+    content: str
 
 
 class Zone:
@@ -24,6 +34,8 @@ class Zone:
         self.__info = None
         self.__stage = None
         self.__records = None
+        self.__metadata = None
+        self.__keys = None
 
     @property
     def name(self) -> DNSName:
@@ -136,3 +148,69 @@ class Zone:
         self._update_records()
 
         self.stage.clear()
+
+    class Metadata(BaseModel):
+        metadata: Dict[str, List[str]] = {}
+
+    @property
+    def _metadata(self) -> Metadata:
+        if self.__metadata is None:
+            metadata_path = self._compute_path(CONSUL_PATH_ZONE_METADATA)
+            _, metadata = self._consul._kv_get(metadata_path, self.Metadata)
+            if metadata is None:
+                metadata = self.Metadata()
+            self.__metadata = metadata
+
+        return self.__metadata
+
+    @property
+    def metadata(self) -> Metadata:
+        return self._metadata
+
+    def set_metadata(self, key: str, value: List[str]) -> None:
+        self._metadata.metadata[key] = value
+        metadata_path = self._compute_path(CONSUL_PATH_ZONE_METADATA)
+        self._consul._kv_set(metadata_path, self._metadata)
+
+    class Keys(BaseModel):
+        keys: List[Key] = []
+
+    @property
+    def _keys(self) -> Keys:
+        if self.__keys is None:
+            keys_path = self._compute_path(CONSUL_PATH_ZONE_KEYS)
+            _, keys = self._consul._kv_get(keys_path, self.Keys)
+            if keys is None:
+                keys = self.Keys()
+            self.__keys = keys
+
+        return self.__keys
+
+    @property
+    def keys(self) -> Iterator[Key]:
+        for key in self._keys.keys:
+            yield key
+
+    def key(self, id: int) -> Key | None:
+        for key in self.keys:
+            if key.id == id:
+                return key
+
+        return None
+
+    def add_key(self, key: Key) -> None:
+        self._keys.keys.append(key)
+        keys_path = self._compute_path(CONSUL_PATH_ZONE_KEYS)
+        self._consul._kv_set(keys_path, self._keys)
+
+    def remove_key(self, id: int) -> None:
+        self._keys.keys = [key for key in self._keys.keys if key.id != id]
+        keys_path = self._compute_path(CONSUL_PATH_ZONE_KEYS)
+        self._consul._kv_set(keys_path, self._keys)
+
+    def update_key(self, id: int, value: Key) -> None:
+        self._keys.keys = [
+            key if key.id != id else value for key in self._keys.keys
+        ]
+        keys_path = self._compute_path(CONSUL_PATH_ZONE_KEYS)
+        self._consul._kv_set(keys_path, self._keys)

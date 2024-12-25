@@ -14,7 +14,7 @@ def stage():
 
 @stage.command()
 @pass_zone
-def status(zone: Zone):
+def status(zone: Zone) -> None:
     cli_name = click.get_current_context().find_root().info_name
     click.echo(f"On zone {zone.name}")
     changes = []
@@ -23,8 +23,9 @@ def status(zone: Zone):
         if change.update.change_type == "add":
             r = change.update.record
         else:
-            r = zone.record(change.update.id)
-            assert r is not None
+            rr = zone.record(change.update.id)
+            assert rr is not None
+            r = rr
         s = lambda s: click.style(s, fg=fg)
 
         changes.append(
@@ -48,7 +49,9 @@ def status(zone: Zone):
 @click.argument("value", type=str)
 @click.option("--ttl", type=int, default=300)
 @pass_zone
-def add(zone: Zone, record: str, record_type: RecordType, value: str, ttl: int):
+def add(
+    zone: Zone, record: str, record_type: RecordType, value: str, ttl: int
+) -> None:
     r = Record(
         record=record,
         record_type=record_type,
@@ -70,7 +73,7 @@ class MissingRecord(Exception):
 @stage.command(name="del")
 @click.argument("id", type=UUID4)
 @pass_zone
-def delete(zone: Zone, id: UUID4):
+def delete(zone: Zone, id: UUID4) -> None:
     r = zone.record(id)
     if r is None:
         raise MissingRecord(id)
@@ -86,14 +89,14 @@ def delete(zone: Zone, id: UUID4):
 @stage.command()
 @click.argument("id", type=int)
 @pass_zone
-def revert(zone: Zone, id: int):
+def revert(zone: Zone, id: int) -> None:
     zone.stage.revert(id)
     click.secho(f"Reverted staged change {id}", fg="yellow")
 
 
 @stage.command()
 @pass_zone
-def commit(zone: Zone):
+def commit(zone: Zone) -> None:
     l = len(list(zone.stage.changes))
     click.secho(
         f"Committing {l} change{'s' if l > 1 else ''} to zone {zone.name}...",

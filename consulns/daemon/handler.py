@@ -1,4 +1,3 @@
-from os import walk
 from socket import socket
 from pydantic import ValidationError
 from structlog import get_logger
@@ -9,6 +8,7 @@ from consulns.daemon.proto import (
     GetAllDomainMetadataParameters,
     GetAllDomainsParameters,
     InitializeParameters,
+    ListParameters,
     LookupParameters,
     Query,
     Response,
@@ -85,13 +85,15 @@ class Handler:
                 self.handle_get_all_domain_metadata(msg.parameters)
             case "lookup":
                 self.handle_lookup(msg.parameters)
+            case "list":
+                self.handle_list(msg.parameters)
             case _:
                 assert False
 
     def handle_initialize(self, _: InitializeParameters):
         self.reply(Response(result=True))
 
-    def handle_get_all_domains(self, params: GetAllDomainsParameters):
+    def handle_get_all_domains(self, params: GetAllDomainsParameters) -> None:
         domains = [
             DomainInfo(
                 id=i,
@@ -109,10 +111,11 @@ class Handler:
 
     def handle_get_all_domain_metadata(
         self, params: GetAllDomainMetadataParameters
-    ):
+    ) -> None:
+        # TODO: get/set domain metadata
         self.reply(Response(result=[]))
 
-    def handle_lookup(self, params: LookupParameters):
+    def handle_lookup(self, params: LookupParameters) -> None:
         self._log.info(
             "performing lookup", qtype=params.qtype, qname=params.qname
         )
@@ -129,7 +132,30 @@ class Handler:
             self.reply(Response(result=[]))
             return
 
-        self._log.info("performing lookup in zone", zone=zone)
         records = zone.lookup(params.qtype, qname)
 
         self.reply(Response(result=list(records)))
+
+    def handle_list(self, params: ListParameters) -> None:
+        zonename = dns_from_text(params.zonename)
+        self._log.info(
+            "listing zone", zone=zonename, domain_id=params.domain_id
+        )
+
+        # TODO: figure out whether `domain_id` is the zone id. PDNS has
+        # inconsistent naming all over the place.
+        if params.domain_id is not None and params.domain_id != -1:
+            zone = self._store.zone_by_id(params.domain_id)
+        else:
+            _, zone = self._store.zone_by_qname(zonename)
+
+        if zone is None:
+            self._log.warning("attempted to list missing zone", zone=zonename)
+            self.reply(Response(result=[]))
+            return
+
+        self.reply(Response(result=[record for _, record in zone.records()]))
+
+    # DNSSEC handlers
+    def handle_get_domain_keys(self, params: GetDomainKeysParams) -> None:
+        pass
