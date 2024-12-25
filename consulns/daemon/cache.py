@@ -103,7 +103,7 @@ class CachedZone:
                 return r.record_type == rtype
 
         # Return SOA on ANY on @
-        if qname == self.name and qtype == QType.ANY:
+        if qname == self.name and (qtype == QType.ANY or qtype == QType.SOA):
             yield self.soa
 
         filtered = (
