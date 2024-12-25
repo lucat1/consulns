@@ -53,17 +53,47 @@ class CachedZone:
     def last_check(self) -> datetime:
         return self._zone.last_check
 
+    @property
+    def soa(self) -> RecordInfo:
+        qname_str = self.name.to_text()
+        return RecordInfo(
+            qname=qname_str,
+            qtype=QType.SOA,
+            # TODO: properly do the SOA record
+            content=f"ns1.{qname_str} root.{qname_str} {self.serial} 7200 3600 1209600 3600",
+            ttl=300,
+        )
+
+    @property
+    def _all_records(self) -> Iterator[Tuple[DNSName, Record]]:
+        return (
+            (domain, record)
+            for domain, records in self._records.items()
+            for record in records
+        )
+
+    def _record_info(self, domain: DNSName, record: Record) -> RecordInfo:
+        return RecordInfo(
+            qname=domain.to_text(),
+            qtype=rtype2qtype[record.record_type],
+            content=str(record.value),
+            ttl=record.ttl,
+        )
+
+    def records(self) -> Iterator[Tuple[DNSName, RecordInfo]]:
+        yield (self.name, self.soa)
+        return (
+            (domain, self._record_info(domain, record))
+            for domain, record in self._all_records
+        )
+
     def lookup(self, qtype: QType, qname: DNSName) -> Iterator[RecordInfo]:
         # Handle queries such as *.example.com
         sub, _ = qname.split(1)
         if sub == "*":
-            records = [
-                record
-                for records in self._records.values()
-                for record in records
-            ]
+            records = self._all_records
 
-        records = self._records[qname]
+        records = map(lambda r: (qname, r), self._records[qname])
 
         def accept_qtype(r: Record) -> bool:
             if qtype == QType.ANY:
@@ -72,28 +102,17 @@ class CachedZone:
                 rtype = qtype2rtype[qtype]
                 return r.record_type == rtype
 
-        filtered = (record for record in records if accept_qtype(record))
-
         # Return SOA on ANY on @
         if qname == self.name and qtype == QType.ANY:
-            qname_str = self.name.to_text()
-            ri = RecordInfo(
-                qname=qname_str,
-                qtype=QType.SOA,
-                # TODO: properly do the SOA record
-                content=f"ns1.{qname_str} root.{qname_str} {self.serial} 7200 3600 1209600 3600",
-                ttl=300,
-            )
-            yield ri
+            yield self.soa
 
-        for record in filtered:
-            ri = RecordInfo(
-                qname=qname.to_text(),
-                qtype=rtype2qtype[record.record_type],
-                content=str(record.value),
-                ttl=record.ttl,
-            )
-            yield ri
+        filtered = (
+            (domain, record)
+            for domain, record in records
+            if accept_qtype(record)
+        )
+        for domain, record in filtered:
+            yield self._record_info(domain, record)
 
 
 class Cache:
